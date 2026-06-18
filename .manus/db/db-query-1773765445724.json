@@ -1,0 +1,110 @@
+{
+  "query": "SELECT id, name, status FROM projects LIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user dCz1QvnpntshJi7.root --database jvZMyWuKFNHBGfG95CC7gr --execute SELECT id, name, status FROM projects LIMIT 20;",
+  "rows": [
+    {
+      "id": "1",
+      "name": "636 w158th st ",
+      "status": "Fabrication"
+    },
+    {
+      "id": "60001",
+      "name": "3196 webster ",
+      "status": "On-Site"
+    },
+    {
+      "id": "60002",
+      "name": "104-106 emerson ",
+      "status": "Fabrication"
+    },
+    {
+      "id": "60003",
+      "name": "2-72 Seagirt blvd ",
+      "status": "On-Site"
+    },
+    {
+      "id": "120001",
+      "name": "4212 park ave",
+      "status": "On-Site"
+    },
+    {
+      "id": "120002",
+      "name": "1718 Crotona ",
+      "status": "On-Site"
+    },
+    {
+      "id": "120003",
+      "name": "610 dekalb #802",
+      "status": "Fabrication"
+    },
+    {
+      "id": "120004",
+      "name": "556 Baltic ",
+      "status": "On-Site"
+    },
+    {
+      "id": "120005",
+      "name": "37-20 114 ",
+      "status": "On-Site"
+    },
+    {
+      "id": "120006",
+      "name": "60 gerry",
+      "status": "On-Site"
+    },
+    {
+      "id": "120007",
+      "name": "38 state st",
+      "status": "On-Site"
+    },
+    {
+      "id": "120008",
+      "name": "Bobov",
+      "status": "Fabrication"
+    },
+    {
+      "id": "120009",
+      "name": "224 3rd ave",
+      "status": "Shop Drawings"
+    },
+    {
+      "id": "120010",
+      "name": "139-81 35th ave",
+      "status": "Shop Drawings"
+    },
+    {
+      "id": "120011",
+      "name": "274 Marcy ave",
+      "status": "On-Site"
+    },
+    {
+      "id": "120012",
+      "name": "2020 Honeywell ",
+      "status": "On-Site"
+    },
+    {
+      "id": "120014",
+      "name": "645 marcy",
+      "status": "Fabrication"
+    },
+    {
+      "id": "210001",
+      "name": "New Project",
+      "status": "Shop Drawings"
+    },
+    {
+      "id": "300001",
+      "name": "Astoria building 4 -5",
+      "status": "On-Site"
+    },
+    {
+      "id": "390001",
+      "name": "486 flushing ave",
+      "status": "On-Site"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\tstatus\n1\t636 w158th st \tFabrication\n60001\t3196 webster \tOn-Site\n60002\t104-106 emerson \tFabrication\n60003\t2-72 Seagirt blvd \tOn-Site\n120001\t4212 park ave\tOn-Site\n120002\t1718 Crotona \tOn-Site\n120003\t610 dekalb #802\tFabrication\n120004\t556 Baltic \tOn-Site\n120005\t37-20 114 \tOn-Site\n120006\t60 gerry\tOn-Site\n120007\t38 state st\tOn-Site\n120008\tBobov\tFabrication\n120009\t224 3rd ave\tShop Drawings\n120010\t139-81 35th ave\tShop Drawings\n120011\t274 Marcy ave\tOn-Site\n120012\t2020 Honeywell \tOn-Site\n120014\t645 marcy\tFabrication\n210001\tNew Project\tShop Drawings\n300001\tAstoria building 4 -5\tOn-Site\n390001\t486 flushing ave\tOn-Site\n",
+  "stderr": "",
+  "execution_time_ms": 100
+}

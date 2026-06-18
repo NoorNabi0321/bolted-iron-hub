@@ -1,0 +1,9 @@
+{
+  "query": "INSERT INTO whatsapp_admin_users (userId, phoneNumber, role, isActive, createdAt, updatedAt) VALUES (1, '03370389622', 'super_admin', 1, NOW(), NOW()) ON DUPLICATE KEY UPDATE role='super_admin', isActive=1, updatedAt=NOW();",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user dCz1QvnpntshJi7.root --database jvZMyWuKFNHBGfG95CC7gr --execute INSERT INTO whatsapp_admin_users (userId, phoneNumber, role, isActive, createdAt, updatedAt) VALUES (1, '03370389622', 'super_admin', 1, NOW(), NOW()) ON DUPLICATE KEY UPDATE role='super_admin', isActive=1, updatedAt=NOW();",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 68
+}

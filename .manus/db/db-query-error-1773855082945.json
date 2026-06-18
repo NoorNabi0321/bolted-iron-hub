@@ -1,0 +1,8 @@
+{
+  "query": "SELECT \n  p.name as projectName,\n  pa.id as assignmentId,\n  pa.subcontractorId,\n  pa.role,\n  s.id as subId,\n  s.companyName\nFROM projects p\nLEFT JOIN projectAssignments pa ON p.id = pa.projectId\nLEFT JOIN subcontractors s ON pa.subcontractorId = s.id\nWHERE p.name IN ('44 hudson', '144 clymer')\nORDER BY p.name, pa.id;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user dCz1QvnpntshJi7.root --database jvZMyWuKFNHBGfG95CC7gr --execute SELECT \n  p.name as projectName,\n  pa.id as assignmentId,\n  pa.subcontractorId,\n  pa.role,\n  s.id as subId,\n  s.companyName\nFROM projects p\nLEFT JOIN projectAssignments pa ON p.id = pa.projectId\nLEFT JOIN subcontractors s ON pa.subcontractorId = s.id\nWHERE p.name IN ('44 hudson', '144 clymer')\nORDER BY p.name, pa.id;",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1146 (42S02) at line 1: Table 'jvzmywukfnhbgfg95cc7gr.projectAssignments' doesn't exist"
+  ]
+}

@@ -1,0 +1,120 @@
+{
+  "query": "SELECT * FROM whatsapp_messages_log ORDER BY createdAt DESC LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user dCz1QvnpntshJi7.root --database jvZMyWuKFNHBGfG95CC7gr --execute SELECT * FROM whatsapp_messages_log ORDER BY createdAt DESC LIMIT 10;",
+  "rows": [
+    {
+      "id": "60009",
+      "groupChatId": "999999999@g.us",
+      "senderPhoneNumber": "+9876543210",
+      "messageText": "/project 274marcy",
+      "commandType": "project",
+      "responseText": "NULL",
+      "status": "unauthorized",
+      "errorMessage": "Group not authorized for bot access",
+      "createdAt": "2026-03-13 16:57:49"
+    },
+    {
+      "id": "60008",
+      "groupChatId": "120363123456789@g.us",
+      "senderPhoneNumber": "+1234567890",
+      "messageText": "/invalid",
+      "commandType": "invalid",
+      "responseText": "NULL",
+      "status": "error",
+      "errorMessage": "Unknown command: /invalid",
+      "createdAt": "2026-03-13 16:57:49"
+    },
+    {
+      "id": "60005",
+      "groupChatId": "120363123456789@g.us",
+      "senderPhoneNumber": "+1234567890",
+      "messageText": "/invalid",
+      "commandType": "invalid",
+      "responseText": "NULL",
+      "status": "error",
+      "errorMessage": "Unknown command: /invalid",
+      "createdAt": "2026-03-13 16:24:06"
+    },
+    {
+      "id": "60006",
+      "groupChatId": "999999999@g.us",
+      "senderPhoneNumber": "+9876543210",
+      "messageText": "/project 274marcy",
+      "commandType": "project",
+      "responseText": "NULL",
+      "status": "unauthorized",
+      "errorMessage": "Group not authorized for bot access",
+      "createdAt": "2026-03-13 16:24:06"
+    },
+    {
+      "id": "60002",
+      "groupChatId": "120363123456789@g.us",
+      "senderPhoneNumber": "+1234567890",
+      "messageText": "/invalid",
+      "commandType": "invalid",
+      "responseText": "NULL",
+      "status": "error",
+      "errorMessage": "Unknown command: /invalid",
+      "createdAt": "2026-03-13 16:17:09"
+    },
+    {
+      "id": "60003",
+      "groupChatId": "999999999@g.us",
+      "senderPhoneNumber": "+9876543210",
+      "messageText": "/project 274marcy",
+      "commandType": "project",
+      "responseText": "NULL",
+      "status": "unauthorized",
+      "errorMessage": "Group not authorized for bot access",
+      "createdAt": "2026-03-13 16:17:09"
+    },
+    {
+      "id": "30011",
+      "groupChatId": "120363123456789@g.us",
+      "senderPhoneNumber": "+1234567890",
+      "messageText": "/invalid",
+      "commandType": "invalid",
+      "responseText": "NULL",
+      "status": "error",
+      "errorMessage": "Unknown command: /invalid",
+      "createdAt": "2026-03-13 15:59:40"
+    },
+    {
+      "id": "30012",
+      "groupChatId": "999999999@g.us",
+      "senderPhoneNumber": "+9876543210",
+      "messageText": "/project 274marcy",
+      "commandType": "project",
+      "responseText": "NULL",
+      "status": "unauthorized",
+      "errorMessage": "Group not authorized for bot access",
+      "createdAt": "2026-03-13 15:59:40"
+    },
+    {
+      "id": "30009",
+      "groupChatId": "999999999@g.us",
+      "senderPhoneNumber": "+9876543210",
+      "messageText": "/project 274marcy",
+      "commandType": "project",
+      "responseText": "NULL",
+      "status": "unauthorized",
+      "errorMessage": "Group not authorized for bot access",
+      "createdAt": "2026-03-13 15:52:30"
+    },
+    {
+      "id": "30008",
+      "groupChatId": "120363123456789@g.us",
+      "senderPhoneNumber": "+1234567890",
+      "messageText": "/invalid",
+      "commandType": "invalid",
+      "responseText": "NULL",
+      "status": "error",
+      "errorMessage": "Unknown command: /invalid",
+      "createdAt": "2026-03-13 15:52:30"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tgroupChatId\tsenderPhoneNumber\tmessageText\tcommandType\tresponseText\tstatus\terrorMessage\tcreatedAt\n60009\t999999999@g.us\t+9876543210\t/project 274marcy\tproject\tNULL\tunauthorized\tGroup not authorized for bot access\t2026-03-13 16:57:49\n60008\t120363123456789@g.us\t+1234567890\t/invalid\tinvalid\tNULL\terror\tUnknown command: /invalid\t2026-03-13 16:57:49\n60005\t120363123456789@g.us\t+1234567890\t/invalid\tinvalid\tNULL\terror\tUnknown command: /invalid\t2026-03-13 16:24:06\n60006\t999999999@g.us\t+9876543210\t/project 274marcy\tproject\tNULL\tunauthorized\tGroup not authorized for bot access\t2026-03-13 16:24:06\n60002\t120363123456789@g.us\t+1234567890\t/invalid\tinvalid\tNULL\terror\tUnknown command: /invalid\t2026-03-13 16:17:09\n60003\t999999999@g.us\t+9876543210\t/project 274marcy\tproject\tNULL\tunauthorized\tGroup not authorized for bot access\t2026-03-13 16:17:09\n30011\t120363123456789@g.us\t+1234567890\t/invalid\tinvalid\tNULL\terror\tUnknown command: /invalid\t2026-03-13 15:59:40\n30012\t999999999@g.us\t+9876543210\t/project 274marcy\tproject\tNULL\tunauthorized\tGroup not authorized for bot access\t2026-03-13 15:59:40\n30009\t999999999@g.us\t+9876543210\t/project 274marcy\tproject\tNULL\tunauthorized\tGroup not authorized for bot access\t2026-03-13 15:52:30\n30008\t120363123456789@g.us\t+1234567890\t/invalid\tinvalid\tNULL\terror\tUnknown command: /invalid\t2026-03-13 15:52:30\n",
+  "stderr": "",
+  "execution_time_ms": 1199
+}

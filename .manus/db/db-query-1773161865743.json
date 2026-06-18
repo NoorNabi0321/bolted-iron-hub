@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE `project_checklists` ADD `cost` decimal(14,2);\nALTER TABLE `project_checklists` ADD `costUpdatedBy` varchar(255);\nALTER TABLE `project_checklists` ADD `costUpdatedAt` timestamp;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user dCz1QvnpntshJi7.root --database jvZMyWuKFNHBGfG95CC7gr --execute ALTER TABLE `project_checklists` ADD `cost` decimal(14,2);\nALTER TABLE `project_checklists` ADD `costUpdatedBy` varchar(255);\nALTER TABLE `project_checklists` ADD `costUpdatedAt` timestamp;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 3014
+}

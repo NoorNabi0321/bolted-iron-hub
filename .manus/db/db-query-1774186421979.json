@@ -1,0 +1,30 @@
+{
+  "query": "SELECT COUNT(*) as total, status, COUNT(CASE WHEN status != 'Inspection Passed' THEN 1 END) as non_inspection_passed FROM projects WHERE isArchived = 0 GROUP BY status;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user dCz1QvnpntshJi7.root --database jvZMyWuKFNHBGfG95CC7gr --execute SELECT COUNT(*) as total, status, COUNT(CASE WHEN status != 'Inspection Passed' THEN 1 END) as non_inspection_passed FROM projects WHERE isArchived = 0 GROUP BY status;",
+  "rows": [
+    {
+      "total": "14",
+      "status": "Inspection Passed",
+      "non_inspection_passed": "0"
+    },
+    {
+      "total": "5",
+      "status": "Shop Drawings",
+      "non_inspection_passed": "5"
+    },
+    {
+      "total": "8",
+      "status": "Fabrication",
+      "non_inspection_passed": "8"
+    },
+    {
+      "total": "10",
+      "status": "On-Site",
+      "non_inspection_passed": "10"
+    }
+  ],
+  "messages": [],
+  "stdout": "total\tstatus\tnon_inspection_passed\n14\tInspection Passed\t0\n5\tShop Drawings\t5\n8\tFabrication\t8\n10\tOn-Site\t10\n",
+  "stderr": "",
+  "execution_time_ms": 521
+}

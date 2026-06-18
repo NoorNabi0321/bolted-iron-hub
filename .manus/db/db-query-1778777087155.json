@@ -1,0 +1,34 @@
+{
+  "query": "SELECT COUNT(*) as count, status FROM projects GROUP BY status ORDER BY status;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user dCz1QvnpntshJi7.root --database jvZMyWuKFNHBGfG95CC7gr --execute SELECT COUNT(*) as count, status FROM projects GROUP BY status ORDER BY status;",
+  "rows": [
+    {
+      "count": "1",
+      "status": "Review"
+    },
+    {
+      "count": "10",
+      "status": "Shop Drawings"
+    },
+    {
+      "count": "4",
+      "status": "Fabrication"
+    },
+    {
+      "count": "11",
+      "status": "On-Site"
+    },
+    {
+      "count": "1",
+      "status": "Installed"
+    },
+    {
+      "count": "44",
+      "status": "Inspection Passed"
+    }
+  ],
+  "messages": [],
+  "stdout": "count\tstatus\n1\tReview\n10\tShop Drawings\n4\tFabrication\n11\tOn-Site\n1\tInstalled\n44\tInspection Passed\n",
+  "stderr": "",
+  "execution_time_ms": 756
+}

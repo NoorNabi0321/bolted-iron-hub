@@ -1,0 +1,9 @@
+{
+  "query": "UPDATE users SET isApproved = true WHERE loginMethod != 'email' OR loginMethod IS NULL;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user dCz1QvnpntshJi7.root --database jvZMyWuKFNHBGfG95CC7gr --execute UPDATE users SET isApproved = true WHERE loginMethod != 'email' OR loginMethod IS NULL;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 59
+}

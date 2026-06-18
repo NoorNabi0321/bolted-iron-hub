@@ -1,0 +1,28 @@
+{
+  "query": "SELECT id, openId, name, email, role, permission, loginMethod FROM users;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user dCz1QvnpntshJi7.root --database jvZMyWuKFNHBGfG95CC7gr --execute SELECT id, openId, name, email, role, permission, loginMethod FROM users;",
+  "rows": [
+    {
+      "id": "1",
+      "openId": "i2ZjnL95FpTzfJZTxAs5kw",
+      "name": "Moyshy Zeinwirt",
+      "email": "m0559434221@gmail.com",
+      "role": "admin",
+      "permission": "edit",
+      "loginMethod": "google"
+    },
+    {
+      "id": "210234",
+      "openId": "HBCoty4LoVqtUfcishrBE7",
+      "name": "משה ציינוירט",
+      "email": "9jcqy26kyk@privaterelay.appleid.com",
+      "role": "admin",
+      "permission": "view",
+      "loginMethod": "apple"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\topenId\tname\temail\trole\tpermission\tloginMethod\n1\ti2ZjnL95FpTzfJZTxAs5kw\tMoyshy Zeinwirt\tm0559434221@gmail.com\tadmin\tedit\tgoogle\n210234\tHBCoty4LoVqtUfcishrBE7\tמשה ציינוירט\t9jcqy26kyk@privaterelay.appleid.com\tadmin\tview\tapple\n",
+  "stderr": "",
+  "execution_time_ms": 56
+}

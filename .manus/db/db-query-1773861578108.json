@@ -1,0 +1,35 @@
+{
+  "query": "SELECT * FROM projects WHERE name = '44 hudson' LIMIT 1;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user dCz1QvnpntshJi7.root --database jvZMyWuKFNHBGfG95CC7gr --execute SELECT * FROM projects WHERE name = '44 hudson' LIMIT 1;",
+  "rows": [
+    {
+      "id": "570001",
+      "name": "44 hudson",
+      "address": "NULL",
+      "borough": "Bronx",
+      "gcCompany": "NULL",
+      "gcContactName": "NULL",
+      "gcContactPhone": "NULL",
+      "gcContactEmail": "NULL",
+      "siteSuperName": "NULL",
+      "siteSuperPhone": "NULL",
+      "status": "Shop Drawings",
+      "startDate": "2026-03-17 00:00:00",
+      "estimatedEndDate": "2026-03-17 00:00:00",
+      "actualEndDate": "NULL",
+      "description": "NULL",
+      "isArchived": "0",
+      "createdAt": "2026-03-17 23:56:57",
+      "updatedAt": "2026-03-18 19:17:30",
+      "primarySubcontractorId": "NULL",
+      "proposalFileUrl": "NULL",
+      "startTime": "NULL",
+      "estimatedEndTime": "NULL",
+      "actualEndTime": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\taddress\tborough\tgcCompany\tgcContactName\tgcContactPhone\tgcContactEmail\tsiteSuperName\tsiteSuperPhone\tstatus\tstartDate\testimatedEndDate\tactualEndDate\tdescription\tisArchived\tcreatedAt\tupdatedAt\tprimarySubcontractorId\tproposalFileUrl\tstartTime\testimatedEndTime\tactualEndTime\n570001\t44 hudson\tNULL\tBronx\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\tShop Drawings\t2026-03-17 00:00:00\t2026-03-17 00:00:00\tNULL\tNULL\t0\t2026-03-17 23:56:57\t2026-03-18 19:17:30\tNULL\tNULL\tNULL\tNULL\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 57
+}

@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE `projects` ADD `startTime` varchar(5);\nALTER TABLE `projects` ADD `estimatedEndTime` varchar(5);\nALTER TABLE `projects` ADD `actualEndTime` varchar(5);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user dCz1QvnpntshJi7.root --database jvZMyWuKFNHBGfG95CC7gr --execute ALTER TABLE `projects` ADD `startTime` varchar(5);\nALTER TABLE `projects` ADD `estimatedEndTime` varchar(5);\nALTER TABLE `projects` ADD `actualEndTime` varchar(5);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1903
+}

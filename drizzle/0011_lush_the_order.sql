@@ -1,0 +1,1 @@
+ALTER TABLE `projects` ADD `isUrgent` boolean DEFAULT false NOT NULL;

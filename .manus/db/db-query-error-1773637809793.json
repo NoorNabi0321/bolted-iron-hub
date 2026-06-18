@@ -1,0 +1,8 @@
+{
+  "query": "INSERT INTO whatsapp_admin_users (user_id, phone_number, role, is_active, created_at, updated_at) VALUES (1, '03370389622', 'super_admin', 1, NOW(), NOW()) ON DUPLICATE KEY UPDATE role='super_admin', is_active=1, updated_at=NOW();",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user dCz1QvnpntshJi7.root --database jvZMyWuKFNHBGfG95CC7gr --execute INSERT INTO whatsapp_admin_users (user_id, phone_number, role, is_active, created_at, updated_at) VALUES (1, '03370389622', 'super_admin', 1, NOW(), NOW()) ON DUPLICATE KEY UPDATE role='super_admin', is_active=1, updated_at=NOW();",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 1: Unknown column 'user_id' in 'field list'"
+  ]
+}

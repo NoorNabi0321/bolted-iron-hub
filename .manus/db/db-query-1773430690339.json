@@ -1,0 +1,17 @@
+{
+  "query": "SELECT id, groupChatId, groupName, isEnabled, createdAt FROM whatsapp_authorized_groups;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user dCz1QvnpntshJi7.root --database jvZMyWuKFNHBGfG95CC7gr --execute SELECT id, groupChatId, groupName, isEnabled, createdAt FROM whatsapp_authorized_groups;",
+  "rows": [
+    {
+      "id": "90001",
+      "groupChatId": "120363423043835752@g.us",
+      "groupName": "What’s up bot",
+      "isEnabled": "1",
+      "createdAt": "2026-03-13 19:09:04"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tgroupChatId\tgroupName\tisEnabled\tcreatedAt\n90001\t120363423043835752@g.us\tWhat’s up bot\t1\t2026-03-13 19:09:04\n",
+  "stderr": "",
+  "execution_time_ms": 96
+}

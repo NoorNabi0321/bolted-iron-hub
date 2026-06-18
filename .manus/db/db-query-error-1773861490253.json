@@ -1,0 +1,8 @@
+{
+  "query": "SELECT id, name, startDate, startTime, estimatedEndDate, endTime FROM projects WHERE name = '44 hudson' LIMIT 1;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user dCz1QvnpntshJi7.root --database jvZMyWuKFNHBGfG95CC7gr --execute SELECT id, name, startDate, startTime, estimatedEndDate, endTime FROM projects WHERE name = '44 hudson' LIMIT 1;",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 1: Unknown column 'endtime' in 'field list'"
+  ]
+}

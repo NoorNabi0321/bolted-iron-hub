@@ -1,0 +1,60 @@
+{
+  "query": "SELECT id, name, status FROM projects WHERE isArchived = 0 AND status != 'Inspection Passed' ORDER BY updatedAt DESC LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user dCz1QvnpntshJi7.root --database jvZMyWuKFNHBGfG95CC7gr --execute SELECT id, name, status FROM projects WHERE isArchived = 0 AND status != 'Inspection Passed' ORDER BY updatedAt DESC LIMIT 10;",
+  "rows": [
+    {
+      "id": "510005",
+      "name": "80 vernon",
+      "status": "On-Site"
+    },
+    {
+      "id": "120009",
+      "name": "224 3rd ave",
+      "status": "Shop Drawings"
+    },
+    {
+      "id": "690001",
+      "name": "5520 12th ave",
+      "status": "Fabrication"
+    },
+    {
+      "id": "120008",
+      "name": "Bobov",
+      "status": "Fabrication"
+    },
+    {
+      "id": "120001",
+      "name": "4212 park ave",
+      "status": "On-Site"
+    },
+    {
+      "id": "1",
+      "name": "636 w158th st ",
+      "status": "Fabrication"
+    },
+    {
+      "id": "780001",
+      "name": "76 N 8th st",
+      "status": "Shop Drawings"
+    },
+    {
+      "id": "810001",
+      "name": "2-26 watjean court",
+      "status": "Shop Drawings"
+    },
+    {
+      "id": "120004",
+      "name": "556 Baltic ",
+      "status": "On-Site"
+    },
+    {
+      "id": "120006",
+      "name": "60 gerry",
+      "status": "Shop Drawings"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\tstatus\n510005\t80 vernon\tOn-Site\n120009\t224 3rd ave\tShop Drawings\n690001\t5520 12th ave\tFabrication\n120008\tBobov\tFabrication\n120001\t4212 park ave\tOn-Site\n1\t636 w158th st \tFabrication\n780001\t76 N 8th st\tShop Drawings\n810001\t2-26 watjean court\tShop Drawings\n120004\t556 Baltic \tOn-Site\n120006\t60 gerry\tShop Drawings\n",
+  "stderr": "",
+  "execution_time_ms": 61
+}

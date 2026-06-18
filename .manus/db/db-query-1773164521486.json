@@ -1,0 +1,28 @@
+{
+  "query": "SELECT u.id, u.name, u.email, u.role, u.permission, s.id as sub_id, s.companyName FROM users u LEFT JOIN subcontractors s ON s.userId = u.id;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user dCz1QvnpntshJi7.root --database jvZMyWuKFNHBGfG95CC7gr --execute SELECT u.id, u.name, u.email, u.role, u.permission, s.id as sub_id, s.companyName FROM users u LEFT JOIN subcontractors s ON s.userId = u.id;",
+  "rows": [
+    {
+      "id": "1",
+      "name": "Moyshy Zeinwirt",
+      "email": "m0559434221@gmail.com",
+      "role": "admin",
+      "permission": "edit",
+      "sub_id": "NULL",
+      "companyName": "NULL"
+    },
+    {
+      "id": "210234",
+      "name": "משה ציינוירט",
+      "email": "9jcqy26kyk@privaterelay.appleid.com",
+      "role": "admin",
+      "permission": "view",
+      "sub_id": "NULL",
+      "companyName": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\temail\trole\tpermission\tsub_id\tcompanyName\n1\tMoyshy Zeinwirt\tm0559434221@gmail.com\tadmin\tedit\tNULL\tNULL\n210234\tמשה ציינוירט\t9jcqy26kyk@privaterelay.appleid.com\tadmin\tview\tNULL\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 61
+}

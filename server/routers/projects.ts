@@ -1,0 +1,1006 @@
+import { TRPCError } from "@trpc/server";
+import { getDb } from "../db";
+import { projectAssignments } from "../../drizzle/schema";
+import { eq } from "drizzle-orm";
+import { z } from "zod";
+import { PROJECT_STATUSES } from "../../drizzle/schema";
+import {
+  assignSubcontractor,
+  createProject,
+  deleteProject,
+  getAllProjects,
+  getAssignmentsForProject,
+  getAssignmentsWithSubcontractorDetails,
+  getProjectById,
+  getProjectsForSubcontractor,
+  getSubcontractorByUserId,
+  isSubcontractorAssignedToProject,
+  removeAssignment,
+  updateProject,
+  createProposal,
+  getProposalByProjectId,
+  getProposalById,
+  deleteProposal,
+  createChecklistItem,
+  getChecklistItemsForProject,
+  getChecklistItemsForSubcontractor,
+  updateChecklistItem,
+  deleteChecklistItem,
+  assignChecklistItem,
+  reorderChecklistItems,
+  deleteAllChecklistItemsForProject,
+  updateProjectAssignment,
+  deleteAssignmentById,
+  createNote,
+  deleteNote,
+  getNotesForProject,
+  createWeeklyReport,
+  getAllWeeklyReports,
+  deleteWeeklyReport,
+  getWeeklyReportsByUser,
+} from "../db";
+import { protectedProcedure, router } from "../_core/trpc";
+import { generateSchedulePDF, ScheduleData, generateProjectsListPDF, ProjectsListData, ProjectsListPDFOptions } from "../_core/pdfGenerator";
+import { storagePut } from "../storage";
+import { extractChecklistFromPDF } from "../_core/proposalExtractor";
+
+const projectStatusEnum = z.enum(PROJECT_STATUSES);
+
+const projectInput = z.object({
+  name: z.string().min(1),
+  address: z.string().optional(),
+  borough: z.string().optional(),
+  gcCompany: z.string().optional(),
+  gcContactName: z.string().optional(),
+  gcContactPhone: z.string().optional(),
+  gcContactEmail: z.string().optional(),
+  siteSuperName: z.string().optional(),
+  siteSuperPhone: z.string().optional(),
+  status: projectStatusEnum.optional(),
+  startDate: z.number().nullable().optional(), // unix ms
+  startTime: z.string().nullable().optional(), // HH:mm format
+  estimatedEndDate: z.number().nullable().optional(),
+  estimatedEndTime: z.string().nullable().optional(), // HH:mm format
+  actualEndDate: z.number().optional(),
+  description: z.string().optional(),
+  isArchived: z.boolean().optional(),
+  isUrgent: z.boolean().optional(),
+});
+
+// For partial updates, make all fields optional
+const projectUpdateInput = z.object({
+  name: z.string().min(1).optional(),
+  address: z.string().optional(),
+  borough: z.string().optional(),
+  gcCompany: z.string().optional(),
+  gcContactName: z.string().optional(),
+  gcContactPhone: z.string().optional(),
+  gcContactEmail: z.string().optional(),
+  siteSuperName: z.string().optional(),
+  siteSuperPhone: z.string().optional(),
+  status: projectStatusEnum.optional(),
+  startDate: z.number().nullable().optional(), // unix ms
+  startTime: z.string().nullable().optional(), // HH:mm format
+  estimatedEndDate: z.number().nullable().optional(),
+  estimatedEndTime: z.string().nullable().optional(), // HH:mm format
+  actualEndDate: z.number().optional(),
+  description: z.string().optional(),
+  isArchived: z.boolean().optional(),
+  isUrgent: z.boolean().optional(),
+});
+
+const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+  return next({ ctx });
+});
+
+export const projectsRouter = router({
+  // Admin: list all projects with optional filters
+  list: adminProcedure
+    .input(
+      z
+        .object({
+          status: projectStatusEnum.optional(),
+          subcontractorId: z.number().optional(),
+          isUnassigned: z.boolean().optional(),
+          search: z.string().optional(),
+          startDateFrom: z.number().optional(),
+          startDateTo: z.number().optional(),
+          isArchived: z.boolean().optional(),
+          includeInspectionPassed: z.boolean().optional(),
+        })
+        .optional()
+    )
+    .query(async ({ input }) => {
+      return getAllProjects({
+        status: input?.status,
+        subcontractorId: input?.subcontractorId,
+        isUnassigned: input?.isUnassigned,
+        search: input?.search,
+        startDateFrom: input?.startDateFrom ? new Date(input.startDateFrom) : undefined,
+        startDateTo: input?.startDateTo ? new Date(input.startDateTo) : undefined,
+        isArchived: input?.isArchived,
+        includeInspectionPassed: input?.includeInspectionPassed,
+      });
+    }),
+
+  // Subcontractor: get their assigned projects
+  myProjects: protectedProcedure.query(async ({ ctx }) => {
+    if (!ctx.user?.id) return [];
+    const subcontractor = await getSubcontractorByUserId(ctx.user.id);
+    if (!subcontractor) return [];
+    return getProjectsForSubcontractor(subcontractor.id);
+  }),
+
+  // Subcontractor: get a specific project they are assigned to
+  getForSubcontractor: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ ctx, input }) => {
+      if (!ctx.user?.id) return undefined;
+      const subcontractor = await getSubcontractorByUserId(ctx.user.id);
+      if (!subcontractor) return undefined;
+      // Verify the subcontractor is assigned to this project
+      const isAssigned = await isSubcontractorAssignedToProject(
+        subcontractor.id,
+        input.id
+      );
+      if (!isAssigned) return undefined;
+      return getProjectById(input.id);
+    }),
+
+  // Admin: get project by ID
+  getById: adminProcedure.input(z.number()).query(async ({ input }) => {
+    return getProjectById(input);
+  }),
+
+  // Admin: get project by ID (alias for client compatibility)
+  get: adminProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
+    return getProjectById(input.id);
+  }),
+
+  // Admin: create project
+  create: adminProcedure
+    .input(projectInput)
+    .mutation(async ({ input }) => {
+      const projectId = await createProject(input);
+      const project = await getProjectById(projectId);
+      return project;
+    }),
+
+  // Admin: update project
+  update: adminProcedure
+    .input(z.object({ id: z.number(), data: projectUpdateInput }))
+    .mutation(async ({ input }) => {
+      const { id, data } = input;
+      // Filter out undefined values
+      const cleanData = Object.fromEntries(
+        Object.entries(data).filter(([, value]) => value !== undefined)
+      );
+      return updateProject(id, cleanData as any);
+    }),
+
+  // Admin: update project status
+  updateStatus: adminProcedure
+    .input(z.object({ id: z.number(), status: projectStatusEnum }))
+    .mutation(async ({ input }) => {
+      return updateProject(input.id, { status: input.status });
+    }),
+
+  // Admin: delete project
+  delete: adminProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      // Delete all checklist items for this project first
+      await deleteAllChecklistItemsForProject(input.id);
+      // Delete all notes for this project
+      const notes = await getNotesForProject(input.id);
+      for (const note of notes) {
+        await deleteNote(note.id);
+      }
+      // Delete the project
+      return deleteProject(input.id);
+    }),
+
+  // Subcontractor: list assigned projects
+  listAssigned: protectedProcedure.query(async ({ ctx }) => {
+    const subcontractor = await getSubcontractorByUserId(ctx.user.id);
+    if (!subcontractor) return [];
+    return getProjectsForSubcontractor(subcontractor.id);
+  }),
+
+  // Admin: assign subcontractor to project
+  assignSubcontractor: adminProcedure
+    .input(z.object({ projectId: z.number(), subcontractorId: z.number(), role: z.string().optional() }))
+    .mutation(async ({ input }) => {
+      return assignSubcontractor(input.projectId, input.subcontractorId);
+    }),
+
+  // Admin: assign subcontractor to project (alias for client compatibility)
+  assign: adminProcedure
+    .input(z.object({ projectId: z.number(), subcontractorId: z.number(), role: z.string().optional() }))
+    .mutation(async ({ input }) => {
+      return assignSubcontractor(input.projectId, input.subcontractorId);
+    }),
+
+  // Admin: unassign subcontractor from project
+  unassignSubcontractor: adminProcedure
+    .input(z.object({ projectId: z.number(), subcontractorId: z.number() }))
+    .mutation(async ({ input }) => {
+      return removeAssignment(input.projectId, input.subcontractorId);
+    }),
+
+  // Admin: remove subcontractor from project (deprecated - use unassignSubcontractor)
+  removeAssignment: adminProcedure
+    .input(z.object({ projectId: z.number(), subcontractorId: z.number() }))
+    .mutation(async ({ input }) => {
+      return removeAssignment(input.projectId, input.subcontractorId);
+    }),
+
+  // Admin: delete assignment (alias for client compatibility)
+  deleteAssignment: adminProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await deleteAssignmentById(input.id);
+      return { success: true };
+    }),
+
+  // Admin: update assignment (alias for client compatibility)
+  updateAssignment: adminProcedure
+    .input(z.object({ assignmentId: z.number(), subcontractorId: z.number(), role: z.string().optional() }))
+    .mutation(async ({ input }) => {
+      const updated = await updateProjectAssignment(
+        input.assignmentId,
+        input.subcontractorId,
+        input.role
+      );
+      if (!updated) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Assignment not found',
+        });
+      }
+      return updated;
+    }),
+
+  // Admin: get assignments for project
+  getAssignments: adminProcedure
+    .input(z.object({ projectId: z.number() }))
+    .query(async ({ input }) => {
+      return getAssignmentsWithSubcontractorDetails(input.projectId);
+    }),
+
+  // Admin: get files for project
+  getFiles: adminProcedure
+    .input(z.object({ projectId: z.number() }))
+    .query(async ({ input }) => {
+      // Return empty array for now - files functionality can be added later
+      return [];
+    }),
+
+  // Admin: get financial data for project
+  getFinancial: adminProcedure
+    .input(z.object({ projectId: z.number() }))
+    .query(async ({ input }) => {
+      // Return empty object for now - financial functionality can be added later
+      return null;
+    }),
+
+  // Admin: create proposal for project
+  createProposal: adminProcedure
+    .input(
+      z.object({
+        projectId: z.number(),
+        fileName: z.string(),
+        fileUrl: z.string(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      return createProposal(input.projectId, input.fileName, input.fileUrl);
+    }),
+
+  // Admin: get proposal for project
+  getProposal: protectedProcedure
+    .input(z.object({ projectId: z.number() }))
+    .query(async ({ input, ctx }) => {
+      // Check if user is admin or assigned to this project
+      if (ctx.user.role !== 'admin') {
+        const subcontractor = await getSubcontractorByUserId(ctx.user.id);
+        if (!subcontractor) {
+          throw new TRPCError({ code: 'FORBIDDEN' });
+        }
+        const isAssigned = await isSubcontractorAssignedToProject(subcontractor.id, input.projectId);
+        if (!isAssigned) {
+          throw new TRPCError({ code: 'FORBIDDEN' });
+        }
+      }
+      const proposal = await getProposalByProjectId(input.projectId);
+      return proposal || null;
+    }),
+
+  // Admin: delete proposal
+  deleteProposal: adminProcedure
+    .input(z.number())
+    .mutation(async ({ input }) => {
+      return deleteProposal(input);
+    }),
+
+  // Admin: create checklist item
+  createChecklistItem: adminProcedure
+    .input(
+      z.object({
+        projectId: z.number(),
+        text: z.string().optional(),
+        title: z.string().optional(),
+        description: z.string().optional(),
+        order: z.number().optional(),
+        isCompleted: z.boolean().optional(),
+        source: z.enum(["manual", "extracted"]).optional().default("manual"),
+      })
+    )
+    .mutation(async ({ input }) => {
+      return createChecklistItem({
+        projectId: input.projectId,
+        text: input.text || input.title || "",
+        isCompleted: input.isCompleted ?? false,
+        order: input.order ?? 0,
+        source: input.source,
+      });
+    }),
+
+  // Admin: get checklist items for project
+  getChecklistItems: protectedProcedure
+    .input(z.object({ projectId: z.number(), source: z.enum(["manual", "extracted"]).optional() }))
+    .query(async ({ input, ctx }) => {
+      // Check if user is admin or assigned to this project
+      let items;
+      if (ctx.user.role !== 'admin') {
+        const subcontractor = await getSubcontractorByUserId(ctx.user.id);
+        if (!subcontractor) {
+          throw new TRPCError({ code: 'FORBIDDEN' });
+        }
+        const isAssigned = await isSubcontractorAssignedToProject(subcontractor.id, input.projectId);
+        if (!isAssigned) {
+          throw new TRPCError({ code: 'FORBIDDEN' });
+        }
+        // For subcontractors, only show items assigned to them
+        items = await getChecklistItemsForSubcontractor(input.projectId, subcontractor.id);
+      } else {
+        // For admins, show all items
+        items = await getChecklistItemsForProject(input.projectId);
+      }
+      if (input.source) {
+        return items.filter((item: any) => item.source === input.source);
+      }
+      return items;
+    }),
+
+  // Admin: update checklist item
+  updateChecklistItem: protectedProcedure
+    .input(
+      z.object({
+        projectId: z.number(),
+        itemId: z.number(),
+        isCompleted: z.boolean().optional(),
+        text: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const { projectId, itemId, isCompleted, text } = input;
+      
+      // Admins can update anything
+      if (ctx.user.role === 'admin') {
+        return updateChecklistItem(itemId, { isCompleted, text });
+      }
+      
+      // Subcontractors can only update isCompleted (toggle completion)
+      if (isCompleted !== undefined && text === undefined) {
+        // Verify subcontractor is assigned to this project
+        const subcontractor = await getSubcontractorByUserId(ctx.user.id);
+        if (!subcontractor) throw new TRPCError({ code: 'FORBIDDEN' });
+        
+        const isAssigned = await isSubcontractorAssignedToProject(subcontractor.id, projectId);
+        if (!isAssigned) throw new TRPCError({ code: 'FORBIDDEN' });
+        
+        return updateChecklistItem(itemId, { isCompleted });
+      }
+      
+      // Subcontractors cannot edit text or delete
+      throw new TRPCError({ code: 'FORBIDDEN', message: 'You can only toggle completion status' });
+    }),
+
+  // Admin: delete checklist item
+  deleteChecklistItem: adminProcedure
+    .input(z.object({ projectId: z.number(), itemId: z.number() }))
+    .mutation(async ({ input }) => {
+      return deleteChecklistItem(input.itemId);
+    }),
+
+  // Admin: assign checklist item to subcontractor
+  assignChecklistItem: adminProcedure
+    .input(
+      z.object({
+        projectId: z.number(),
+        itemId: z.number(),
+        subcontractorId: z.number().nullable(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      return assignChecklistItem(input.itemId, input.subcontractorId);
+    }),
+
+  // Admin: reorder checklist items
+  reorderChecklistItems: adminProcedure
+    .input(
+      z.object({
+        projectId: z.number(),
+        itemIds: z.array(z.number()),
+      })
+    )
+    .mutation(async ({ input }) => {
+      return reorderChecklistItems(input.projectId, input.itemIds);
+    }),
+
+  // Admin: create note for project
+  createNote: adminProcedure
+    .input(
+      z.object({
+        projectId: z.number(),
+        content: z.string(),
+        isAdminOnly: z.boolean().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      return createNote(input.projectId, input.content);
+    }),
+
+  // Admin: add note (alias for createNote for client compatibility)
+  addNote: adminProcedure
+    .input(
+      z.object({
+        projectId: z.number(),
+        content: z.string(),
+        isAdminOnly: z.boolean().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const noteId = await createNote({
+        projectId: input.projectId,
+        authorId: ctx.user?.id || '',
+        authorName: ctx.user?.name || 'Admin',
+        content: input.content,
+        isAdminOnly: input.isAdminOnly ?? false,
+        createdAt: new Date(),
+      });
+      return { id: noteId };
+    }),
+
+  // Admin: upload file for project
+  uploadFile: adminProcedure
+    .input(
+      z.object({
+        projectId: z.number(),
+        fileName: z.string(),
+        fileBase64: z.string(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      try {
+        const fileBuffer = Buffer.from(input.fileBase64, "base64");
+        const { url } = await storagePut(
+          `projects/${input.projectId}/files/${input.fileName}`,
+          fileBuffer
+        );
+        return { url, fileName: input.fileName };
+      } catch (error) {
+        throw new Error(`Failed to upload file: ${error}`);
+      }
+    }),
+
+  // Admin: delete file from project
+  deleteFile: adminProcedure
+    .input(
+      z.object({
+        projectId: z.number(),
+        fileName: z.string(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      return { success: true };
+    }),
+
+  // Admin: update financial data for project
+  updateFinancial: adminProcedure
+    .input(
+      z.object({
+        projectId: z.number(),
+        data: z.object({
+          budgetedAmount: z.number().optional(),
+          actualAmount: z.number().optional(),
+          notes: z.string().optional(),
+        }),
+      })
+    )
+    .mutation(async ({ input }) => {
+      return { success: true };
+    }),
+
+  // Admin: get notes for project
+  getNotes: adminProcedure
+    .input(z.object({ projectId: z.number() }))
+    .query(async ({ input }) => {
+      return getNotesForProject(input.projectId);
+    }),
+
+  // Admin: delete note
+  deleteNote: adminProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      return deleteNote(input.id);
+    }),
+
+  // Admin: export schedule as PDF
+  exportSchedulePDF: adminProcedure
+    .input(
+      z.object({
+        weekStart: z.number(),
+        weekEnd: z.number(),
+        timezoneOffset: z.number().optional(),
+        statuses: z.array(z.string()).optional(),
+        subcontractorIds: z.array(z.number()).optional(),
+        selectedDate: z.number().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const weekStartDate = new Date(input.weekStart);
+      const weekEndDate = new Date(input.weekEnd);
+      const selectedDateObj = input.selectedDate ? new Date(input.selectedDate) : null;
+      
+      console.log('[PDF Export] Input params:', {
+        weekStart: weekStartDate.toISOString(),
+        weekEnd: weekEndDate.toISOString(),
+        selectedDate: selectedDateObj?.toISOString(),
+        statuses: input.statuses,
+        subcontractorIds: input.subcontractorIds,
+      });
+      
+      // Fetch all active projects
+      let allProjects = await getAllProjects({
+        isArchived: false,
+        includeInspectionPassed: false,
+      });
+      
+      console.log('[PDF Export] Total projects fetched:', allProjects.length);
+
+      // Helper functions (same as frontend DailySchedule.tsx)
+      function toDate(d: Date | string | null): Date | null {
+        if (!d) return null;
+        const date = typeof d === 'string' ? new Date(d) : d;
+        return isNaN(date.getTime()) ? null : date;
+      }
+
+      function isSameDay(a: Date, b: Date): boolean {
+        return (
+          a.getFullYear() === b.getFullYear() &&
+          a.getMonth() === b.getMonth() &&
+          a.getDate() === b.getDate()
+        );
+      }
+
+      function isWithinRange(day: Date, start: Date | null, end: Date | null): boolean {
+        if (!start) return false;
+        const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+        const rangeStart = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+        const rangeEnd = end
+          ? new Date(end.getFullYear(), end.getMonth(), end.getDate())
+          : rangeStart;
+        return dayStart >= rangeStart && dayStart <= rangeEnd;
+      }
+
+      // Generate 7 days starting from weekStart
+      const days: Date[] = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(weekStartDate);
+        d.setDate(weekStartDate.getDate() + i);
+        days.push(d);
+      }
+
+      // Helper function to get projects for a specific day (same logic as frontend)
+      function getProjectsForDay(day: Date): typeof allProjects {
+        return allProjects.filter((p) => {
+          // Auto-remove projects with 'Inspection Passed' status
+          if (p.status === 'Inspection Passed') return false;
+          
+          const start = toDate(p.startDate);
+          const end = toDate(p.estimatedEndDate);
+          
+          // Project must have a start date
+          if (!start) return false;
+          
+          // Determine if project should appear on this day
+          let shouldAppear = false;
+          
+          if (end) {
+            // If both start and end dates exist, show on all days in range
+            shouldAppear = isWithinRange(day, start, end);
+          } else {
+            // If only start date exists, behavior depends on project status
+            // Shop Drawings and Review statuses: show ONLY on start date
+            // Other statuses: show from start date onwards
+            if (p.status === 'Shop Drawings' || p.status === 'Review') {
+              shouldAppear = isSameDay(day, start);
+            } else {
+              // For other statuses (Fabrication, On-Site, etc.), show from start date onwards
+              const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+              const rangeStart = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+              shouldAppear = dayStart >= rangeStart;
+            }
+          }
+          
+          if (!shouldAppear) return false;
+          
+          // Apply status filter (multi-select: show if status is in selectedStatuses or if no statuses selected)
+          if (input.statuses && input.statuses.length > 0 && !input.statuses.includes(p.status)) return false;
+          
+          // Apply subcontractor filter
+          if (input.subcontractorIds && input.subcontractorIds.length > 0) {
+            // This would require fetching assignments, handled separately below
+            return true; // Will be filtered in the next step
+          }
+          
+          return true;
+        });
+      }
+
+      // Build schedule data for each day
+      const scheduleDataArray: ScheduleData[] = [];
+      const uniqueProjectIds = new Set<number>(); // Track unique project IDs
+      let totalProjectsInPDF = 0;
+      
+      for (const day of days) {
+        // Apply selectedDate filter if provided
+        if (selectedDateObj && !isSameDay(day, selectedDateObj)) {
+          continue; // Skip this day if a specific date is selected and doesn't match
+        }
+        
+        let dayProjects = getProjectsForDay(day);
+        
+        // Apply subcontractor filter if provided
+        if (input.subcontractorIds && input.subcontractorIds.length > 0) {
+          const projectsWithSubs = await Promise.all(
+            dayProjects.map(async (p) => {
+              const assignments = await getProjectAssignments(p.id);
+              const hasSubcontractor = assignments.some(a => input.subcontractorIds!.includes(a.subcontractorId));
+              return hasSubcontractor ? p : null;
+            })
+          );
+          dayProjects = projectsWithSubs.filter((p) => p !== null) as typeof dayProjects;
+        }
+        
+        // Determine if we should show this day
+        // Show empty days only if NO filters are applied
+        const hasFilters = (input.statuses && input.statuses.length > 0) || 
+                          (input.subcontractorIds && input.subcontractorIds.length > 0) ||
+                          selectedDateObj !== null;
+        
+        if (dayProjects.length > 0 || !hasFilters) {
+          const dayName = day.toLocaleDateString('en-US', { weekday: 'long' });
+          totalProjectsInPDF += dayProjects.length;
+          
+          // Track unique project IDs
+          dayProjects.forEach(p => uniqueProjectIds.add(p.id));
+          
+          console.log(`[PDF Export] Day ${dayName} (${day.toISOString().split('T')[0]}): ${dayProjects.length} projects`);
+          
+          scheduleDataArray.push({
+            date: day,
+            dayName,
+            projects: dayProjects.map((p) => ({
+              id: p.id.toString(),
+              name: p.name,
+              status: p.status,
+              address: p.address,
+              isUrgent: (p as any).isUrgent || false,
+              startTime: p.startTime,
+              estimatedEndTime: p.estimatedEndTime,
+              subcontractors: [],
+            })),
+          });
+        }
+      }
+
+      console.log('[PDF Export] Total projects in PDF (cumulative):', totalProjectsInPDF);
+      console.log('[PDF Export] Unique projects in PDF:', uniqueProjectIds.size);
+      console.log('[PDF Export] Schedule data array length:', scheduleDataArray.length);
+      
+      const pdfBuffer = await generateSchedulePDF({
+        scheduleData: scheduleDataArray,
+        weekStart: weekStartDate,
+        weekEnd: weekEndDate,
+        generatedAt: new Date(),
+        uniqueProjectCount: uniqueProjectIds.size,
+      });
+      const timestamp = new Date().getTime();
+      const fileName = `Weekly_Schedule_${new Date().toISOString().split("T")[0]}_${timestamp}.pdf`;
+
+      // Upload to S3
+      const { url } = await storagePut(
+        `reports/${fileName}`,
+        pdfBuffer,
+        "application/pdf"
+      );
+
+      return {
+        fileName,
+        url,
+      };
+    }),
+
+  // Admin: export projects list as PDF
+  exportProjectsListPDF: adminProcedure
+    .input(
+      z.object({
+        projectIds: z.array(z.number()).optional(),
+        status: projectStatusEnum.optional(),
+        options: z
+          .object({
+            includeAssignments: z.boolean().optional(),
+            includeChecklists: z.boolean().optional(),
+          })
+          .optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      let projects = await getAllProjects({
+        status: input?.status,
+        isArchived: false,
+        includeInspectionPassed: false,
+      });
+
+      if (!projects) projects = [];
+      
+      if (input?.projectIds && Array.isArray(input.projectIds) && input.projectIds.length > 0) {
+        projects = projects.filter((p) => input.projectIds!.includes(p.id));
+      }
+
+      const projectsData: ProjectsListData[] = [];
+
+      for (const project of projects) {
+        const assignments = await getAssignmentsWithSubcontractorDetails(
+          project.id
+        );
+        const checklists = input?.options?.includeChecklists
+          ? await getChecklistItemsForProject(project.id)
+          : [];
+
+        projectsData.push({
+          id: project.id,
+          name: project.name,
+          status: project.status,
+          address: project.address,
+          borough: project.borough,
+          gcCompany: project.gcCompany,
+          gcContactName: project.gcContactName,
+          gcContactPhone: project.gcContactPhone,
+          gcContactEmail: project.gcContactEmail,
+          siteSuperName: project.siteSuperName,
+          siteSuperPhone: project.siteSuperPhone,
+          startDate: project.startDate,
+          estimatedEndDate: project.estimatedEndDate,
+          assignments: input?.options?.includeAssignments
+            ? assignments.map((a) => ({
+                subcontractorName: a.subcontractor.name,
+                subcontractorPhone: a.subcontractor.phone,
+                subcontractorEmail: a.subcontractor.email,
+              }))
+            : [],
+          checklists: checklists.map((c) => ({
+            title: c.title,
+            isCompleted: c.isCompleted,
+          })),
+        });
+      }
+
+      const pdfBuffer = await generateProjectsListPDF({
+        projects: projectsData,
+        generatedAt: new Date(),
+        filterSummary: `Status: ${input?.status || 'All'}`,
+        exportNote: 'Exported from Bolted Iron Hub',
+        ...input?.options,
+      } as ProjectsListPDFOptions);
+      if (!pdfBuffer || pdfBuffer.length === 0) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to generate PDF',
+        });
+      }
+
+      const fileName = `Projects_List_${new Date().toISOString().split("T")[0]}.pdf`;
+
+      // Upload to S3
+      const { url } = await storagePut(
+        `reports/${fileName}`,
+        pdfBuffer,
+        "application/pdf"
+      );
+
+      return {
+        fileName,
+        url,
+      };
+    }),
+
+  // Progress tracking: get projects with checklists and their completion status
+  progressWithChecklists: adminProcedure.query(async () => {
+    const allProjects = await getAllProjects({
+      isArchived: false,
+      includeInspectionPassed: false,
+    });
+
+    const projectsWithProgress = [];
+
+    for (const project of allProjects) {
+      const checklistItems = await getChecklistItemsForProject(project.id);
+      if (checklistItems.length > 0) {
+        const completedCount = checklistItems.filter(
+          (item) => item.isCompleted
+        ).length;
+        const progressPercentage = Math.round(
+          (completedCount / checklistItems.length) * 100
+        );
+
+        projectsWithProgress.push({
+          id: project.id,
+          name: project.name,
+          status: project.status,
+          completedCount,
+          totalCount: checklistItems.length,
+          progressPercentage,
+        });
+      }
+    }
+
+    return projectsWithProgress;
+  }),
+
+  // Progress tracking: get projects without checklists
+  progressWithoutChecklists: adminProcedure.query(async () => {
+    const allProjects = await getAllProjects({
+      isArchived: false,
+      includeInspectionPassed: false,
+    });
+
+    const projectsWithoutChecklists = [];
+
+    for (const project of allProjects) {
+      const checklistItems = await getChecklistItemsForProject(project.id);
+      if (checklistItems.length === 0) {
+        projectsWithoutChecklists.push({
+          id: project.id,
+          name: project.name,
+          status: project.status,
+          completedCount: 0,
+          totalCount: 0,
+          progressPercentage: 0,
+        });
+      }
+    }
+
+    return projectsWithoutChecklists;
+  }),
+
+  // Generate weekly report PDF on demand
+  generateWeeklyReportPDFOnDemand: adminProcedure.mutation(async ({ ctx }) => {
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+
+    const allProjects = await getAllProjects({
+      isArchived: false,
+      includeInspectionPassed: false,
+    });
+
+    const projectsData: any[] = [];
+    let totalItems = 0;
+    let totalCompleted = 0;
+
+    for (const project of allProjects) {
+      const checklistItems = await getChecklistItemsForProject(project.id);
+      if (checklistItems.length > 0) {
+        const completed = checklistItems.filter((item) => item.isCompleted).length;
+        const progress = Math.round((completed / checklistItems.length) * 100);
+
+        projectsData.push({
+          id: project.id,
+          name: project.name,
+          status: project.status,
+          totalItems: checklistItems.length,
+          completedItems: completed,
+          progressPercentage: progress,
+        });
+
+        totalItems += checklistItems.length;
+        totalCompleted += completed;
+      }
+    }
+
+    const { generateProjectProgressPDF } = await import("../_core/pdfGenerator");
+    const pdfBuffer = await generateProjectProgressPDF({
+      projects: projectsData,
+      weekStart,
+      weekEnd,
+      totalProjects: projectsData.length,
+      totalItems,
+      totalCompleted,
+      generatedAt: now,
+    });
+
+    const fileName = `Weekly_Report_${now.toISOString().split("T")[0]}.pdf`;
+
+    // Convert PDF buffer to base64 for client-side display
+    const pdfBase64 = pdfBuffer.toString("base64");
+
+    return {
+      success: true,
+      pdfBase64,
+      fileName,
+      totalProjects: projectsData.length,
+      totalCompleted: projectsData.filter((p) => p.progressPercentage === 100).length,
+      totalItems,
+    };
+  }),
+
+  // Admin: upload proposal PDF and extract checklist
+  uploadProposalAndExtract: adminProcedure
+    .input(
+      z.object({
+        projectId: z.number(),
+        fileName: z.string(),
+        fileBase64: z.string(), // Base64 encoded PDF
+      })
+    )
+    .mutation(async ({ input }) => {
+      try {
+        // Convert base64 to buffer
+        const pdfBuffer = Buffer.from(input.fileBase64, "base64");
+        
+        // Extract checklist items from PDF
+        const extractionResult = await extractChecklistFromPDF(pdfBuffer);
+        
+        if (!extractionResult.success) {
+          throw new Error(extractionResult.error || "Failed to extract items from PDF");
+        }
+        
+        // Delete all existing extracted checklist items for this project
+        // This ensures new PDF upload replaces old items instead of appending
+        await deleteAllChecklistItemsForProject(input.projectId, "extracted");
+        
+        // Save checklist items to database
+        const savedItems = [];
+        for (let index = 0; index < extractionResult.items.length; index++) {
+          const item = extractionResult.items[index];
+          const id = await createChecklistItem({
+            projectId: input.projectId,
+            text: item.text,
+            isCompleted: false,
+            order: index,
+            source: "extracted",
+          });
+          savedItems.push(id);
+        }
+        
+        return {
+          success: true,
+          itemsExtracted: extractionResult.items.length,
+          fileName: input.fileName,
+        };
+      } catch (error) {
+        console.error("[uploadProposalAndExtract] Error:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: `Failed to extract checklist from PDF: ${error instanceof Error ? error.message : "Unknown error"}`,
+        });
+      }
+    }),
+});

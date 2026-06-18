@@ -1,0 +1,79 @@
+{
+  "query": "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'projects' AND TABLE_SCHEMA = DATABASE();",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user dCz1QvnpntshJi7.root --database jvZMyWuKFNHBGfG95CC7gr --execute SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'projects' AND TABLE_SCHEMA = DATABASE();",
+  "rows": [
+    {
+      "COLUMN_NAME": "id"
+    },
+    {
+      "COLUMN_NAME": "name"
+    },
+    {
+      "COLUMN_NAME": "address"
+    },
+    {
+      "COLUMN_NAME": "borough"
+    },
+    {
+      "COLUMN_NAME": "gcCompany"
+    },
+    {
+      "COLUMN_NAME": "gcContactName"
+    },
+    {
+      "COLUMN_NAME": "gcContactPhone"
+    },
+    {
+      "COLUMN_NAME": "gcContactEmail"
+    },
+    {
+      "COLUMN_NAME": "siteSuperName"
+    },
+    {
+      "COLUMN_NAME": "siteSuperPhone"
+    },
+    {
+      "COLUMN_NAME": "status"
+    },
+    {
+      "COLUMN_NAME": "startDate"
+    },
+    {
+      "COLUMN_NAME": "estimatedEndDate"
+    },
+    {
+      "COLUMN_NAME": "actualEndDate"
+    },
+    {
+      "COLUMN_NAME": "description"
+    },
+    {
+      "COLUMN_NAME": "isArchived"
+    },
+    {
+      "COLUMN_NAME": "createdAt"
+    },
+    {
+      "COLUMN_NAME": "updatedAt"
+    },
+    {
+      "COLUMN_NAME": "primarySubcontractorId"
+    },
+    {
+      "COLUMN_NAME": "proposalFileUrl"
+    },
+    {
+      "COLUMN_NAME": "startTime"
+    },
+    {
+      "COLUMN_NAME": "estimatedEndTime"
+    },
+    {
+      "COLUMN_NAME": "actualEndTime"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\nid\nname\naddress\nborough\ngcCompany\ngcContactName\ngcContactPhone\ngcContactEmail\nsiteSuperName\nsiteSuperPhone\nstatus\nstartDate\nestimatedEndDate\nactualEndDate\ndescription\nisArchived\ncreatedAt\nupdatedAt\nprimarySubcontractorId\nproposalFileUrl\nstartTime\nestimatedEndTime\nactualEndTime\n",
+  "stderr": "",
+  "execution_time_ms": 54
+}

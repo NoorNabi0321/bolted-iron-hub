@@ -1,0 +1,9 @@
+{
+  "query": "INSERT IGNORE INTO whatsapp_command_permissions (command, description, requiredRole, isEnabled, createdAt) VALUES \n('/team', 'List assigned subcontractors', 'admin', true, NOW()),\n('/checklist', 'Show project checklist', 'admin', true, NOW()),\n('/notes', 'Show project notes', 'admin', true, NOW()),\n('/changes', 'Show change orders', 'admin', true, NOW()),\n('/list', 'List all projects or projects for a date', 'admin', true, NOW()),\n('/count', 'Get project count', 'admin', true, NOW()),\n('/insights', 'Show dashboard insights', 'admin', true, NOW());",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user dCz1QvnpntshJi7.root --database jvZMyWuKFNHBGfG95CC7gr --execute INSERT IGNORE INTO whatsapp_command_permissions (command, description, requiredRole, isEnabled, createdAt) VALUES \n('/team', 'List assigned subcontractors', 'admin', true, NOW()),\n('/checklist', 'Show project checklist', 'admin', true, NOW()),\n('/notes', 'Show project notes', 'admin', true, NOW()),\n('/changes', 'Show change orders', 'admin', true, NOW()),\n('/list', 'List all projects or projects for a date', 'admin', true, NOW()),\n('/count', 'Get project count', 'admin', true, NOW()),\n('/insights', 'Show dashboard insights', 'admin', true, NOW());",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 74
+}

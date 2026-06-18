@@ -1,0 +1,8 @@
+{
+  "query": "INSERT INTO whatsapp_command_permissions (command, description, requiredRole, isEnabled, createdAt, updatedAt) VALUES \n('/team', 'List assigned subcontractors', 'admin', true, NOW(), NOW()),\n('/checklist', 'Show project checklist', 'admin', true, NOW(), NOW()),\n('/notes', 'Show project notes', 'admin', true, NOW(), NOW()),\n('/changes', 'Show change orders', 'admin', true, NOW(), NOW()),\n('/list', 'List all projects or projects for a date', 'admin', true, NOW(), NOW()),\n('/count', 'Get project count', 'admin', true, NOW(), NOW()),\n('/insights', 'Show dashboard insights', 'admin', true, NOW(), NOW())\nON DUPLICATE KEY UPDATE isEnabled = true, updatedAt = NOW();",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user dCz1QvnpntshJi7.root --database jvZMyWuKFNHBGfG95CC7gr --execute INSERT INTO whatsapp_command_permissions (command, description, requiredRole, isEnabled, createdAt, updatedAt) VALUES \n('/team', 'List assigned subcontractors', 'admin', true, NOW(), NOW()),\n('/checklist', 'Show project checklist', 'admin', true, NOW(), NOW()),\n('/notes', 'Show project notes', 'admin', true, NOW(), NOW()),\n('/changes', 'Show change orders', 'admin', true, NOW(), NOW()),\n('/list', 'List all projects or projects for a date', 'admin', true, NOW(), NOW()),\n('/count', 'Get project count', 'admin', true, NOW(), NOW()),\n('/insights', 'Show dashboard insights', 'admin', true, NOW(), NOW())\nON DUPLICATE KEY UPDATE isEnabled = true, updatedAt = NOW();",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 1: Unknown column 'updatedAt' in 'field list'"
+  ]
+}
