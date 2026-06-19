@@ -106,3 +106,7 @@ temp/
 *.sqlite
 *.sqlite3
 .project-config.json
+
+# Local-only dev helpers (not for deployment)
+/reset-mysql-bih.ps1
+/seed-admin.mjs

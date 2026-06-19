@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNull, like, lt, lte, ne, notInArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, like, lt, lte, ne, notInArray, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   Financial,
@@ -607,7 +607,7 @@ export async function updateUserPermission(userId: number, permission: string): 
 }
 
 // ─── Project Messages (Chat) ─────────────────────────────────────────────────
-import { projectMessages, InsertProjectMessage, ProjectMessage, whatsappAuthorizedGroups, InsertWhatsAppAuthorizedGroup, WhatsAppAuthorizedGroup, whatsappMessagesLog, InsertWhatsAppMessageLog, WhatsAppMessageLog } from "../drizzle/schema";
+import { projectMessages, InsertProjectMessage, ProjectMessage } from "../drizzle/schema";
 
 export async function getMessagesForProject(
   projectId: number,
@@ -712,16 +712,14 @@ export async function getChecklistItemsForSubcontractor(
 ): Promise<ProjectChecklistItem[]> {
   const db = await getDb();
   if (!db) return [];
+  // Subcontractors see ONLY items explicitly assigned to them (not unassigned ones).
   return db
     .select()
     .from(projectChecklistItems)
     .where(
       and(
         eq(projectChecklistItems.projectId, projectId),
-        or(
-          eq(projectChecklistItems.assignedSubcontractorId, subcontractorId),
-          isNull(projectChecklistItems.assignedSubcontractorId)
-        )
+        eq(projectChecklistItems.assignedSubcontractorId, subcontractorId)
       )
     )
     .orderBy(projectChecklistItems.order);
@@ -784,141 +782,6 @@ export async function deleteAllChecklistItemsForProject(projectId: number, sourc
   }
 }
 
-// --- WhatsApp Authorized Groups ---
-export async function createAuthorizedGroup(
-  data: InsertWhatsAppAuthorizedGroup
-): Promise<number> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const result = await db.insert(whatsappAuthorizedGroups).values(data);
-  return (result[0] as { insertId: number }).insertId;
-}
-
-export async function getAuthorizedGroupByChatId(
-  groupChatId: string
-): Promise<WhatsAppAuthorizedGroup | undefined> {
-  const db = await getDb();
-  if (!db) return undefined;
-  const result = await db
-    .select()
-    .from(whatsappAuthorizedGroups)
-    .where(eq(whatsappAuthorizedGroups.groupChatId, groupChatId))
-    .limit(1);
-  return result[0];
-}
-
-export async function getAllAuthorizedGroups(): Promise<WhatsAppAuthorizedGroup[]> {
-  const db = await getDb();
-  if (!db) return [];
-  return db
-    .select()
-    .from(whatsappAuthorizedGroups)
-    .orderBy(desc(whatsappAuthorizedGroups.createdAt));
-}
-
-export async function updateAuthorizedGroup(
-  id: number,
-  data: Partial<InsertWhatsAppAuthorizedGroup>
-): Promise<void> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db
-    .update(whatsappAuthorizedGroups)
-    .set(data)
-    .where(eq(whatsappAuthorizedGroups.id, id));
-}
-
-export async function deleteAuthorizedGroup(id: number): Promise<void> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db.delete(whatsappAuthorizedGroups).where(eq(whatsappAuthorizedGroups.id, id));
-}
-
-export async function updateGroupLastActivity(groupChatId: string): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
-  await db
-    .update(whatsappAuthorizedGroups)
-    .set({ lastActivityAt: new Date() })
-    .where(eq(whatsappAuthorizedGroups.groupChatId, groupChatId));
-}
-
-// --- WhatsApp Messages Log ---
-export async function logWhatsAppMessage(
-  data: InsertWhatsAppMessageLog
-): Promise<number> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const result = await db.insert(whatsappMessagesLog).values(data);
-  return (result[0] as { insertId: number }).insertId;
-}
-
-export async function getMessagesLogForGroup(
-  groupChatId: string,
-  limit: number = 100
-): Promise<WhatsAppMessageLog[]> {
-  const db = await getDb();
-  if (!db) return [];
-  return db
-    .select()
-    .from(whatsappMessagesLog)
-    .where(eq(whatsappMessagesLog.groupChatId, groupChatId))
-    .orderBy(desc(whatsappMessagesLog.createdAt))
-    .limit(limit);
-}
-
-export async function getMessagesLogByCommandType(
-  commandType: string,
-  limit: number = 100
-): Promise<WhatsAppMessageLog[]> {
-  const db = await getDb();
-  if (!db) return [];
-  return db
-    .select()
-    .from(whatsappMessagesLog)
-    .where(eq(whatsappMessagesLog.commandType, commandType))
-    .orderBy(desc(whatsappMessagesLog.createdAt))
-    .limit(limit);
-}
-
-export async function getMessagesLogByStatus(
-  status: "success" | "error" | "unauthorized",
-  limit: number = 100
-): Promise<WhatsAppMessageLog[]> {
-  const db = await getDb();
-  if (!db) return [];
-  return db
-    .select()
-    .from(whatsappMessagesLog)
-    .where(eq(whatsappMessagesLog.status, status))
-    .orderBy(desc(whatsappMessagesLog.createdAt))
-    .limit(limit);
-}
-
-export async function getAllMessagesLog(limit: number = 1000): Promise<WhatsAppMessageLog[]> {
-  const db = await getDb();
-  if (!db) return [];
-  return db
-    .select()
-    .from(whatsappMessagesLog)
-    .orderBy(desc(whatsappMessagesLog.createdAt))
-    .limit(limit);
-}
-
-export async function deleteMessageLog(id: number): Promise<void> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db.delete(whatsappMessagesLog).where(eq(whatsappMessagesLog.id, id));
-}
-
-export async function deleteOldMessagesLog(daysOld: number = 30): Promise<void> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const cutoffDate = new Date(Date.now() - daysOld * 24 * 60 * 60 * 1000);
-  await db
-    .delete(whatsappMessagesLog)
-    .where(lt(whatsappMessagesLog.createdAt, cutoffDate));
-}
 
 
 // ─── Weekly Reports ──────────────────────────────────────────────────────────

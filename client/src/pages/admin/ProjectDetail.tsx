@@ -549,6 +549,9 @@ export default function AdminProjectDetail() {
           {/* Notes Tab - Notes + Chat */}
           {activeTab === "checklist" && (
             <div className="space-y-6">
+              {/* Manual Checklist & Tasks (added/edited/completed/deleted by hand) */}
+              <ProjectChecklist projectId={projectId} />
+
               {/* Section 1: Notes */}
               <Card className="bg-card border-border">
                 <CardHeader className="pb-3">
@@ -865,9 +868,6 @@ export default function AdminProjectDetail() {
                   )}
                 </CardContent>
               </Card>
-
-              {/* Section 4: Project Checklist (Manually Managed) */}
-              <ProjectChecklist projectId={projectId} />
 
               {/* Section 5: Proposal Upload & Auto-Checklist */}
               <ProposalUploadSection

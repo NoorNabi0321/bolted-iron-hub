@@ -30,7 +30,7 @@ export function useToast() {
         if ('Notification' in window && Notification.permission === 'granted') {
           new Notification(title || 'Notification', {
             body: description,
-            tag: 'whatsapp-bot',
+            tag: 'bih',
           });
         }
       }

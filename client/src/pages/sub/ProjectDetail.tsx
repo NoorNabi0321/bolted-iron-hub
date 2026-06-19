@@ -23,7 +23,7 @@ import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { useLocation, useParams } from "wouter";
 import ProjectChat from "@/components/ProjectChat";
-import { ProposalAndChecklistSection } from "@/components/ProposalAndChecklistSection";
+import { ProjectChecklist } from "@/components/ProjectChecklist";
 
 export default function SubProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -219,8 +219,9 @@ export default function SubProjectDetail() {
               </CardContent>
             </Card>
 
-            {/* Proposal & Auto-Checklist Section */}
-            <ProposalAndChecklistSection projectId={projectId} />
+            {/* Checklist — extracted items assigned to this subcontractor.
+                Read-only except completing/uncompleting (no add/edit/delete). */}
+            <ProjectChecklist projectId={projectId} source="extracted" />
 
             {/* Project Chat */}
             <ProjectChat projectId={projectId} />

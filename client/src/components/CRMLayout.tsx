@@ -14,7 +14,6 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
-  MessageCircle,
   Shield,
   TrendingUp,
   UserCheck,
@@ -37,7 +36,6 @@ const adminMenuItems = [
   { icon: Shield, label: "Permissions", path: "/permissions" },
   { icon: UserCheck, label: "Approvals", path: "/approvals" },
   { icon: FileSpreadsheet, label: "Bulk Import", path: "/bulk-import" },
-  { icon: MessageCircle, label: "WhatsApp Settings", path: "/whatsapp-settings" },
 ];
 
 const subMenuItems = [

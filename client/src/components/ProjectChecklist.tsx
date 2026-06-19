@@ -15,15 +15,20 @@ interface ChecklistItem {
 
 interface ProjectChecklistProps {
   projectId: number;
+  /**
+   * Which checklist to show:
+   * - "manual"    → hand-managed items (admin Checklist tab). Default.
+   * - "extracted" → proposal-extracted items (subcontractor view).
+   */
+  source?: "manual" | "extracted";
 }
 
-export function ProjectChecklist({ projectId }: ProjectChecklistProps) {
+export function ProjectChecklist({ projectId, source = "manual" }: ProjectChecklistProps) {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
-  // Fetch auto-extracted checklist items from PDF (filtered by assigned subcontractor)
   const { data: items = [], isLoading, refetch } = trpc.projects.getChecklistItems.useQuery({
     projectId,
-    source: "extracted",
+    source,
   });
 
   const maxOrder = items.length > 0 ? Math.max(...items.map((item) => item.order)) : 0;

@@ -14,10 +14,6 @@ import { messagesRouter } from "./routers/messages";
 import { proposalsRouter } from "./routers/proposals";
 import { emailAuthRouter } from "./routers/emailAuth";
 import { bulkImportRouter } from "./routers/bulkImport";
-import { whatsappRouter } from "./routers/whatsapp";
-import { whatsappAdminRouter } from "./routers/whatsappAdmin";
-import { whatsappBotRouter } from "./routers/whatsappBot";
-import { logsRouter } from "./routers/logs";
 import { serviceTokensRouter } from "./routers/serviceTokens";
 
 export const appRouter = router({
@@ -44,10 +40,6 @@ export const appRouter = router({
   proposals: proposalsRouter,
   emailAuth: emailAuthRouter,
   bulkImport: bulkImportRouter,
-  whatsapp: whatsappRouter,
-  whatsappAdmins: whatsappAdminRouter,
-  whatsappBot: whatsappBotRouter,
-  logs: logsRouter,
   serviceTokens: serviceTokensRouter,
 });
 

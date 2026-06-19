@@ -15,8 +15,6 @@ import AdminPermissions from "./pages/admin/Permissions";
 import AdminApprovals from "./pages/admin/Approvals";
 import AdminBulkImport from "./pages/admin/BulkImport";
 import ProjectProgress from "./pages/admin/ProjectProgress";
-import WhatsAppSettings from "./pages/WhatsAppSettings";
-import { WhatsAppBotDashboard } from "./pages/WhatsAppBotDashboard";
 import SubDashboard from "./pages/sub/Dashboard";
 import SubProjectDetail from "./pages/sub/ProjectDetail";
 import LoginPage from "./pages/Login";
@@ -53,8 +51,6 @@ function AppRouter() {
         <Route path="/approvals" component={AdminApprovals} />
         <Route path="/bulk-import" component={AdminBulkImport} />
         <Route path="/progress" component={ProjectProgress} />
-        <Route path="/whatsapp-settings" component={WhatsAppSettings} />
-        <Route path="/whatsapp-bot" component={WhatsAppBotDashboard} />
         <Route component={NotFound} />
       </Switch>
     );
