@@ -1,0 +1,1 @@
+ALTER TABLE `project_checklist_items` ADD `progress` int DEFAULT 0 NOT NULL;

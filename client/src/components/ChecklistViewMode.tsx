@@ -13,12 +13,14 @@ import {
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
+import { ChecklistProgressSlider } from "@/components/ChecklistProgressSlider";
 
 interface ChecklistItem {
   id: number;
   text: string;
   isCompleted: boolean;
   order: number;
+  progress?: number;
 }
 
 interface ChecklistViewModeProps {
@@ -26,6 +28,7 @@ interface ChecklistViewModeProps {
   items: ChecklistItem[];
   isLoading: boolean;
   onItemsChange?: () => void;
+  showProgress?: boolean;
 }
 
 export function ChecklistViewMode({
@@ -33,6 +36,7 @@ export function ChecklistViewMode({
   items,
   isLoading,
   onItemsChange,
+  showProgress = false,
 }: ChecklistViewModeProps) {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -217,12 +221,13 @@ export function ChecklistViewMode({
             ) : (
               /* View Mode */
               <div
-                className={`flex items-center gap-2 md:gap-3 p-3 md:p-4 rounded-lg border transition-all ${
+                className={`p-3 md:p-4 rounded-lg border transition-all ${
                   item.isCompleted
                     ? "bg-gray-50 border-gray-200"
                     : "bg-white border-gray-200 hover:border-gray-300"
                 }`}
               >
+                <div className="flex items-center gap-2 md:gap-3">
                 {/* Tick Icon */}
                 <button
                   onClick={() => handleToggleComplete(item)}
@@ -272,6 +277,17 @@ export function ChecklistViewMode({
                   >
                     <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
                   </button>
+                )}
+                </div>
+                {showProgress && (
+                  <div className="mt-3 px-1">
+                    <ChecklistProgressSlider
+                      value={item.progress ?? 0}
+                      onCommit={(progress) =>
+                        updateItemMutation.mutate({ projectId, itemId: item.id, progress })
+                      }
+                    />
+                  </div>
                 )}
               </div>
             )}

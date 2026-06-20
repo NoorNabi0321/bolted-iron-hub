@@ -66,6 +66,7 @@ export function ProjectChecklist({ projectId, source = "manual" }: ProjectCheckl
           items={items}
           isLoading={isLoading}
           onItemsChange={handleItemsChange}
+          showProgress={source === "extracted"}
         />
       </CardContent>
     </Card>

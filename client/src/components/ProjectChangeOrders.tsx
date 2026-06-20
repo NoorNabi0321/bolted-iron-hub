@@ -5,15 +5,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Check, Plus, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { usePersistedState } from "@/hooks/usePersistedState";
 import { toast } from "sonner";
 
 export function ProjectChangeOrders({ projectId }: { projectId: number }) {
-  const [showForm, setShowForm] = useState(false);
-  const [orderNumber, setOrderNumber] = useState("");
-  const [description, setDescription] = useState("");
-  const [amount, setAmount] = useState("");
-  const [notes, setNotes] = useState("");
+  const [showForm, setShowForm] = usePersistedState(`bih:proj:${projectId}:co:showForm`, false);
+  const [orderNumber, setOrderNumber] = usePersistedState(`bih:proj:${projectId}:co:orderNumber`, "");
+  const [description, setDescription] = usePersistedState(`bih:proj:${projectId}:co:description`, "");
+  const [amount, setAmount] = usePersistedState(`bih:proj:${projectId}:co:amount`, "");
+  const [notes, setNotes] = usePersistedState(`bih:proj:${projectId}:co:notes`, "");
 
   const utils = trpc.useUtils();
   const { data: orders = [] } = trpc.changeOrders.list.useQuery({ projectId });

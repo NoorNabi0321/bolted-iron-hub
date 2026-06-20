@@ -38,6 +38,8 @@ import {
   getAllWeeklyReports,
   deleteWeeklyReport,
   getWeeklyReportsByUser,
+  getFinancialByProjectId,
+  upsertFinancial,
 } from "../db";
 import { protectedProcedure, router } from "../_core/trpc";
 import { generateSchedulePDF, ScheduleData, generateProjectsListPDF, ProjectsListData, ProjectsListPDFOptions } from "../_core/pdfGenerator";
@@ -183,7 +185,8 @@ export const projectsRouter = router({
   updateStatus: adminProcedure
     .input(z.object({ id: z.number(), status: projectStatusEnum }))
     .mutation(async ({ input }) => {
-      return updateProject(input.id, { status: input.status });
+      await updateProject(input.id, { status: input.status });
+      return { success: true };
     }),
 
   // Admin: delete project
@@ -281,8 +284,7 @@ export const projectsRouter = router({
   getFinancial: adminProcedure
     .input(z.object({ projectId: z.number() }))
     .query(async ({ input }) => {
-      // Return empty object for now - financial functionality can be added later
-      return null;
+      return (await getFinancialByProjectId(input.projectId)) ?? null;
     }),
 
   // Admin: create proposal for project
@@ -382,30 +384,44 @@ export const projectsRouter = router({
         itemId: z.number(),
         isCompleted: z.boolean().optional(),
         text: z.string().optional(),
+        progress: z.number().min(0).max(100).optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const { projectId, itemId, isCompleted, text } = input;
-      
+      const { projectId, itemId, isCompleted, text, progress } = input;
+
+      // Build the update; progress drives completion (100% = complete).
+      const buildPatch = () => {
+        const patch: { isCompleted?: boolean; text?: string; progress?: number } = {};
+        if (text !== undefined) patch.text = text;
+        if (isCompleted !== undefined) patch.isCompleted = isCompleted;
+        if (progress !== undefined) {
+          patch.progress = progress;
+          patch.isCompleted = progress >= 100;
+        }
+        return patch;
+      };
+
       // Admins can update anything
       if (ctx.user.role === 'admin') {
-        return updateChecklistItem(itemId, { isCompleted, text });
+        await updateChecklistItem(itemId, buildPatch());
+        return { success: true };
       }
-      
-      // Subcontractors can only update isCompleted (toggle completion)
-      if (isCompleted !== undefined && text === undefined) {
-        // Verify subcontractor is assigned to this project
+
+      // Subcontractors: completion toggle and/or progress on their assigned project (no text edits)
+      if (text === undefined && (isCompleted !== undefined || progress !== undefined)) {
         const subcontractor = await getSubcontractorByUserId(ctx.user.id);
         if (!subcontractor) throw new TRPCError({ code: 'FORBIDDEN' });
-        
+
         const isAssigned = await isSubcontractorAssignedToProject(subcontractor.id, projectId);
         if (!isAssigned) throw new TRPCError({ code: 'FORBIDDEN' });
-        
-        return updateChecklistItem(itemId, { isCompleted });
+
+        await updateChecklistItem(itemId, buildPatch());
+        return { success: true };
       }
-      
+
       // Subcontractors cannot edit text or delete
-      throw new TRPCError({ code: 'FORBIDDEN', message: 'You can only toggle completion status' });
+      throw new TRPCError({ code: 'FORBIDDEN', message: 'You can only update completion or progress' });
     }),
 
   // Admin: delete checklist item
@@ -508,19 +524,29 @@ export const projectsRouter = router({
       return { success: true };
     }),
 
-  // Admin: update financial data for project
+  // Admin: update financial data for project (persists to the financials table)
   updateFinancial: adminProcedure
     .input(
       z.object({
         projectId: z.number(),
-        data: z.object({
-          budgetedAmount: z.number().optional(),
-          actualAmount: z.number().optional(),
-          notes: z.string().optional(),
-        }),
+        contractValue: z.number().optional(),
+        amountBilled: z.number().optional(),
+        amountReceived: z.number().optional(),
+        subcontractorPayout: z.number().optional(),
+        billingStatus: z.enum(["Not Started", "Partial", "Fully Billed", "Paid"]).optional(),
+        notes: z.string().optional(),
       })
     )
     .mutation(async ({ input }) => {
+      await upsertFinancial({
+        projectId: input.projectId,
+        contractValue: input.contractValue != null ? String(input.contractValue) : null,
+        amountBilled: input.amountBilled != null ? String(input.amountBilled) : null,
+        amountReceived: input.amountReceived != null ? String(input.amountReceived) : null,
+        subcontractorPayout: input.subcontractorPayout != null ? String(input.subcontractorPayout) : null,
+        billingStatus: input.billingStatus,
+        notes: input.notes,
+      });
       return { success: true };
     }),
 
@@ -828,128 +854,6 @@ export const projectsRouter = router({
         url,
       };
     }),
-
-  // Progress tracking: get projects with checklists and their completion status
-  progressWithChecklists: adminProcedure.query(async () => {
-    const allProjects = await getAllProjects({
-      isArchived: false,
-      includeInspectionPassed: false,
-    });
-
-    const projectsWithProgress = [];
-
-    for (const project of allProjects) {
-      const checklistItems = await getChecklistItemsForProject(project.id);
-      if (checklistItems.length > 0) {
-        const completedCount = checklistItems.filter(
-          (item) => item.isCompleted
-        ).length;
-        const progressPercentage = Math.round(
-          (completedCount / checklistItems.length) * 100
-        );
-
-        projectsWithProgress.push({
-          id: project.id,
-          name: project.name,
-          status: project.status,
-          completedCount,
-          totalCount: checklistItems.length,
-          progressPercentage,
-        });
-      }
-    }
-
-    return projectsWithProgress;
-  }),
-
-  // Progress tracking: get projects without checklists
-  progressWithoutChecklists: adminProcedure.query(async () => {
-    const allProjects = await getAllProjects({
-      isArchived: false,
-      includeInspectionPassed: false,
-    });
-
-    const projectsWithoutChecklists = [];
-
-    for (const project of allProjects) {
-      const checklistItems = await getChecklistItemsForProject(project.id);
-      if (checklistItems.length === 0) {
-        projectsWithoutChecklists.push({
-          id: project.id,
-          name: project.name,
-          status: project.status,
-          completedCount: 0,
-          totalCount: 0,
-          progressPercentage: 0,
-        });
-      }
-    }
-
-    return projectsWithoutChecklists;
-  }),
-
-  // Generate weekly report PDF on demand
-  generateWeeklyReportPDFOnDemand: adminProcedure.mutation(async ({ ctx }) => {
-    const now = new Date();
-    const weekStart = new Date(now);
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekEnd.getDate() + 6);
-
-    const allProjects = await getAllProjects({
-      isArchived: false,
-      includeInspectionPassed: false,
-    });
-
-    const projectsData: any[] = [];
-    let totalItems = 0;
-    let totalCompleted = 0;
-
-    for (const project of allProjects) {
-      const checklistItems = await getChecklistItemsForProject(project.id);
-      if (checklistItems.length > 0) {
-        const completed = checklistItems.filter((item) => item.isCompleted).length;
-        const progress = Math.round((completed / checklistItems.length) * 100);
-
-        projectsData.push({
-          id: project.id,
-          name: project.name,
-          status: project.status,
-          totalItems: checklistItems.length,
-          completedItems: completed,
-          progressPercentage: progress,
-        });
-
-        totalItems += checklistItems.length;
-        totalCompleted += completed;
-      }
-    }
-
-    const { generateProjectProgressPDF } = await import("../_core/pdfGenerator");
-    const pdfBuffer = await generateProjectProgressPDF({
-      projects: projectsData,
-      weekStart,
-      weekEnd,
-      totalProjects: projectsData.length,
-      totalItems,
-      totalCompleted,
-      generatedAt: now,
-    });
-
-    const fileName = `Weekly_Report_${now.toISOString().split("T")[0]}.pdf`;
-
-    // Convert PDF buffer to base64 for client-side display
-    const pdfBase64 = pdfBuffer.toString("base64");
-
-    return {
-      success: true,
-      pdfBase64,
-      fileName,
-      totalProjects: projectsData.length,
-      totalCompleted: projectsData.filter((p) => p.progressPercentage === 100).length,
-      totalItems,
-    };
-  }),
 
   // Admin: upload proposal PDF and extract checklist
   uploadProposalAndExtract: adminProcedure

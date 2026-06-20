@@ -838,3 +838,4 @@ export async function getWeeklyReportsByUser(userId: number): Promise<WeeklyRepo
     .where(eq(weeklyReports.generatedBy, userId))
     .orderBy(desc(weeklyReports.reportDate));
 }
+

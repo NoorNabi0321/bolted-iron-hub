@@ -15,22 +15,21 @@ import {
   LogOut,
   Menu,
   Shield,
-  TrendingUp,
   UserCheck,
   Users,
   X,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { useNavigation } from "@/contexts/NavigationContext";
+import { useScrollRestoration } from "@/hooks/useScrollRestoration";
 import { ArrowLeft } from "lucide-react";
 
 const adminMenuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: FolderOpen, label: "Projects", path: "/projects" },
-  { icon: TrendingUp, label: "Progress", path: "/progress" },
   { icon: Building2, label: "Subcontractors", path: "/subcontractors" },
   { icon: Users, label: "Users", path: "/users" },
   { icon: Shield, label: "Permissions", path: "/permissions" },
@@ -46,7 +45,11 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
-  const { canGoBack, goBack, saveScrollPosition } = useNavigation();
+  const { canGoBack, goBack } = useNavigation();
+  const mainRef = useRef<HTMLElement>(null);
+
+  // Restore scroll position per route on the real scroll container (<main> below).
+  useScrollRestoration(mainRef);
 
   const isAdmin = user?.role === "admin";
   const menuItems = isAdmin ? adminMenuItems : subMenuItems;
@@ -55,16 +58,6 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setMobileSidebarOpen(false);
   }, [location]);
-
-  // Track scroll position
-  useEffect(() => {
-    const handleScroll = () => {
-      saveScrollPosition(window.scrollY);
-    };
-
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [saveScrollPosition]);
 
   const handleNavClick = (path: string) => {
     setLocation(path);
@@ -222,7 +215,7 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto bg-secondary/30">
+        <main ref={mainRef} className="flex-1 overflow-auto bg-secondary/30">
           <div className="max-w-7xl mx-auto">{children}</div>
         </main>
       </div>

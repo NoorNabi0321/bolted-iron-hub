@@ -57,11 +57,14 @@ import { useRef, useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useLocation, useParams } from "wouter";
 import { useNavigation } from "@/contexts/NavigationContext";
+import { usePersistedState } from "@/hooks/usePersistedState";
 import ProjectForm from "./ProjectForm";
 import ProjectChat from "@/components/ProjectChat";
 import { ProjectChangeOrders } from "@/components/ProjectChangeOrders";
 import { ProposalUploadSection } from "@/components/ProposalUploadSection";
 import { ProjectChecklist } from "@/components/ProjectChecklist";
+import { ChecklistProgressSlider } from "@/components/ChecklistProgressSlider";
+import { AddChecklistItem } from "@/components/AddChecklistItem";
 import { TabCarousel, TabItem } from "@/components/TabCarousel";
 import CRMLayout from "@/components/CRMLayout";
 
@@ -71,7 +74,7 @@ export default function AdminProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const projectId = parseInt(id ?? "0");
   const [, setLocation] = useLocation();
-  const [activeTab, setActiveTab] = useState<TabType>("project-info");
+  const [activeTab, setActiveTab] = usePersistedState<TabType>(`bih:proj:${projectId}:tab`, "project-info");
   const contentRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
@@ -130,10 +133,12 @@ export default function AdminProjectDetail() {
     window.history.back();
   };
   const [showEditDialog, setShowEditDialog] = useState(false);
-  const [noteContent, setNoteContent] = useState("");
+  const [noteContent, setNoteContent] = usePersistedState(`bih:proj:${projectId}:noteDraft`, "");
   const [isAdminNote, setIsAdminNote] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [editingItemId, setEditingItemId] = useState<number | null>(null);
+  const [editItemText, setEditItemText] = useState("");
 
   const utils = trpc.useUtils();
 
@@ -149,7 +154,7 @@ export default function AdminProjectDetail() {
   // For backward compatibility, use extracted items for the Files tab
   const checklistItems = extractedChecklistItems;
 
-  const [financialForm, setFinancialForm] = useState({
+  const [financialForm, setFinancialForm] = usePersistedState(`bih:proj:${projectId}:financialDraft`, {
     contractValue: "",
     amountBilled: "",
     amountReceived: "",
@@ -278,6 +283,15 @@ export default function AdminProjectDetail() {
       });
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleSaveItemEdit = (itemId: number) => {
+    if (!editItemText.trim()) {
+      toast.error("Item text cannot be empty");
+      return;
+    }
+    updateChecklistMutation.mutate({ projectId, itemId, text: editItemText.trim() });
+    setEditingItemId(null);
   };
 
   if (isLoading || !project) {
@@ -741,10 +755,18 @@ export default function AdminProjectDetail() {
               {/* Section 3: Auto-Extracted Checklist from PDF */}
               <Card className="bg-card border-border">
                 <CardHeader className="pb-2 md:pb-3">
-                  <CardTitle className="flex items-center gap-2 text-base md:text-lg">
-                    <FileText className="h-4 w-4 md:h-5 md:w-5 text-red-600" />
-                    <span className="truncate">Extracted Checklist & Tasks</span>
-                  </CardTitle>
+                  <div className="flex items-center justify-between gap-2">
+                    <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+                      <FileText className="h-4 w-4 md:h-5 md:w-5 text-red-600" />
+                      <span className="truncate">Extracted Checklist & Tasks</span>
+                    </CardTitle>
+                    <AddChecklistItem
+                      projectId={projectId}
+                      source="extracted"
+                      maxOrder={checklistItems.reduce((m, i) => Math.max(m, i.order), 0)}
+                      onItemAdded={() => utils.projects.getChecklistItems.invalidate({ projectId })}
+                    />
+                  </div>
                 </CardHeader>
 
                 <CardContent className="space-y-3 md:space-y-4">
@@ -790,12 +812,13 @@ export default function AdminProjectDetail() {
                         {checklistItems.map((item) => (
                           <div
                             key={item.id}
-                            className={`flex items-center gap-2 md:gap-3 p-3 md:p-4 rounded-lg border transition-all ${
+                            className={`p-3 md:p-4 rounded-lg border transition-all ${
                               item.isCompleted
                                 ? "bg-gray-50 border-gray-200"
                                 : "bg-white border-gray-200 hover:border-gray-300"
                             }`}
                           >
+                            <div className="flex items-center gap-2 md:gap-3">
                             {/* Tick Icon */}
                             <button
                               onClick={() =>
@@ -815,17 +838,31 @@ export default function AdminProjectDetail() {
                               )}
                             </button>
 
-                            {/* Item Text */}
+                            {/* Item Text (inline editable) */}
                             <div className="flex-1 min-w-0">
-                              <p
-                                className={`text-xs md:text-sm break-words ${
-                                  item.isCompleted
-                                    ? "line-through text-gray-400"
-                                    : "text-gray-900"
-                                }`}
-                              >
-                                {item.text}
-                              </p>
+                              {editingItemId === item.id ? (
+                                <input
+                                  type="text"
+                                  value={editItemText}
+                                  onChange={(e) => setEditItemText(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") handleSaveItemEdit(item.id);
+                                    if (e.key === "Escape") setEditingItemId(null);
+                                  }}
+                                  autoFocus
+                                  className="w-full px-2 py-1 border border-gray-300 rounded-md text-xs md:text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                                />
+                              ) : (
+                                <p
+                                  className={`text-xs md:text-sm break-words ${
+                                    item.isCompleted
+                                      ? "line-through text-gray-400"
+                                      : "text-gray-900"
+                                  }`}
+                                >
+                                  {item.text}
+                                </p>
+                              )}
                             </div>
 
                             {/* Subcontractor Assignment Dropdown */}
@@ -853,6 +890,37 @@ export default function AdminProjectDetail() {
                               </SelectContent>
                             </Select>
 
+                            {/* Edit / Save / Cancel */}
+                            {editingItemId === item.id ? (
+                              <>
+                                <button
+                                  onClick={() => handleSaveItemEdit(item.id)}
+                                  className="flex-shrink-0 p-0.5 md:p-1 text-green-600 hover:bg-green-50 rounded-full transition-colors"
+                                  aria-label="Save"
+                                >
+                                  <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5" />
+                                </button>
+                                <button
+                                  onClick={() => setEditingItemId(null)}
+                                  className="flex-shrink-0 p-0.5 md:p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                                  aria-label="Cancel"
+                                >
+                                  <X className="w-4 h-4 md:w-5 md:h-5" />
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setEditingItemId(item.id);
+                                  setEditItemText(item.text);
+                                }}
+                                className="flex-shrink-0 p-0.5 md:p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                                aria-label="Edit item"
+                              >
+                                <Edit2 className="w-4 h-4 md:w-5 md:h-5" />
+                              </button>
+                            )}
+
                             {/* Delete Icon */}
                             <button
                               onClick={() => deleteChecklistMutation.mutate({ projectId, itemId: item.id })}
@@ -861,6 +929,15 @@ export default function AdminProjectDetail() {
                             >
                               <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
                             </button>
+                            </div>
+                            <div className="mt-3 px-1">
+                              <ChecklistProgressSlider
+                                value={item.progress ?? 0}
+                                onCommit={(progress) =>
+                                  updateChecklistMutation.mutate({ projectId, itemId: item.id, progress })
+                                }
+                              />
+                            </div>
                           </div>
                         ))}
                       </div>

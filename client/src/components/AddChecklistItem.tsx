@@ -17,12 +17,15 @@ interface AddChecklistItemProps {
   projectId: number;
   maxOrder: number;
   onItemAdded?: () => void;
+  /** Which list the new item belongs to. Defaults to the manual checklist. */
+  source?: "manual" | "extracted";
 }
 
 export function AddChecklistItem({
   projectId,
   maxOrder,
   onItemAdded,
+  source = "manual",
 }: AddChecklistItemProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [itemText, setItemText] = useState("");
@@ -50,7 +53,7 @@ export function AddChecklistItem({
       text: itemText.trim(),
       order: maxOrder + 1,
       isCompleted: false,
-      source: "manual",
+      source,
     });
   };
 

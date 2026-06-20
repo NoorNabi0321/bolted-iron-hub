@@ -232,6 +232,8 @@ export const projectChecklistItems = mysqlTable("project_checklist_items", {
   projectId: int("projectId").notNull(),
   text: text("text").notNull(),
   isCompleted: boolean("isCompleted").default(false).notNull(),
+  /** Manual work-progress 0–100 (reported by the assigned sub or an admin). 100 = complete. */
+  progress: int("progress").default(0).notNull(),
   order: int("order").notNull(),
   source: mysqlEnum("source", ["manual", "extracted"]).default("manual").notNull(),
   assignedSubcontractorId: int("assignedSubcontractorId"),
