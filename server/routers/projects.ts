@@ -694,7 +694,7 @@ export const projectsRouter = router({
         if (input.subcontractorIds && input.subcontractorIds.length > 0) {
           const projectsWithSubs = await Promise.all(
             dayProjects.map(async (p) => {
-              const assignments = await getProjectAssignments(p.id);
+              const assignments = await getAssignmentsForProject(p.id);
               const hasSubcontractor = assignments.some(a => input.subcontractorIds!.includes(a.subcontractorId));
               return hasSubcontractor ? p : null;
             })

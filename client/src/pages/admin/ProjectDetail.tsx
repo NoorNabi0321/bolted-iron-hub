@@ -668,91 +668,7 @@ export default function AdminProjectDetail() {
           {/* Files Tab - Files & Attachments + Change Order + Proposal Upload & Auto-Checklist */}
           {activeTab === "files" && (
             <div className="space-y-6">
-              {/* Section 1: Files & Attachments */}
-              <Card className="bg-card border-border">
-                <CardHeader className="pb-3 flex flex-row items-center justify-between">
-                  <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                    <Paperclip className="w-4 h-4" />
-                    Files & Attachments
-                  </CardTitle>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploadProposalMutation.isPending}
-                    className="gap-1.5 h-7 text-xs"
-                  >
-                    {uploadProposalMutation.isPending ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <Plus className="w-3.5 h-3.5" />
-                    )}
-                    Upload
-                  </Button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    className="hidden"
-                    onChange={handleFileUpload}
-                    accept=".pdf"
-                  />
-                </CardHeader>
-                <CardContent>
-                  {files.length === 0 ? (
-                    <div
-                      onClick={() => fileInputRef.current?.click()}
-                      className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
-                    >
-                      <Paperclip className="w-6 h-6 mx-auto mb-2 text-muted-foreground/50" />
-                      <p className="text-sm text-muted-foreground">Click to upload files</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {files.map((file) => (
-                        <div
-                          key={file.id}
-                          className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
-                        >
-                          <div className="flex items-center gap-3 flex-1 min-w-0">
-                            <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-foreground truncate">{file.fileName}</p>
-                              <p className="text-xs text-muted-foreground">{formatFileSize(file.fileSize)}</p>
-                            </div>
-                          </div>
-                          <div className="flex gap-2 flex-shrink-0">
-                            <a
-                              href={file.fileUrl}
-                              download
-                              className="p-1.5 rounded hover:bg-background transition-colors text-muted-foreground hover:text-foreground"
-                            >
-                              <Download className="w-4 h-4" />
-                            </a>
-                            <button
-                              onClick={() => deleteFileMutation.mutate({ id: file.id })}
-                              className="p-1.5 rounded hover:bg-background transition-colors text-muted-foreground hover:text-destructive"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Section 2: Change Orders */}
-              <Card className="bg-card border-border">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Change Orders</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ProjectChangeOrders projectId={projectId} />
-                </CardContent>
-              </Card>
-
-              {/* Section 3: Auto-Extracted Checklist from PDF */}
+              {/* Section 1: Auto-Extracted Checklist from PDF */}
               <Card className="bg-card border-border">
                 <CardHeader className="pb-2 md:pb-3">
                   <div className="flex items-center justify-between gap-2">
@@ -946,7 +862,17 @@ export default function AdminProjectDetail() {
                 </CardContent>
               </Card>
 
-              {/* Section 5: Proposal Upload & Auto-Checklist */}
+              {/* Section 2: Change Orders */}
+              <Card className="bg-card border-border">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Change Orders</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ProjectChangeOrders projectId={projectId} />
+                </CardContent>
+              </Card>
+
+              {/* Section 3: Proposal Upload & Auto-Checklist */}
               <ProposalUploadSection
                 projectId={projectId}
                 proposalId={project?.proposalId}
@@ -954,6 +880,80 @@ export default function AdminProjectDetail() {
                 extractedItemsCount={project?.extractedItemsCount}
                 onProposalUploaded={() => utils.projects.get.invalidate({ id: projectId })}
               />
+
+              {/* Section 4: Files & Attachments */}
+              <Card className="bg-card border-border">
+                <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                  <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                    <Paperclip className="w-4 h-4" />
+                    Files & Attachments
+                  </CardTitle>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadProposalMutation.isPending}
+                    className="gap-1.5 h-7 text-xs"
+                  >
+                    {uploadProposalMutation.isPending ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Plus className="w-3.5 h-3.5" />
+                    )}
+                    Upload
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                    accept=".pdf"
+                  />
+                </CardHeader>
+                <CardContent>
+                  {files.length === 0 ? (
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                    >
+                      <Paperclip className="w-6 h-6 mx-auto mb-2 text-muted-foreground/50" />
+                      <p className="text-sm text-muted-foreground">Click to upload files</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {files.map((file) => (
+                        <div
+                          key={file.id}
+                          className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                        >
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-foreground truncate">{file.fileName}</p>
+                              <p className="text-xs text-muted-foreground">{formatFileSize(file.fileSize)}</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 flex-shrink-0">
+                            <a
+                              href={file.fileUrl}
+                              download
+                              className="p-1.5 rounded hover:bg-background transition-colors text-muted-foreground hover:text-foreground"
+                            >
+                              <Download className="w-4 h-4" />
+                            </a>
+                            <button
+                              onClick={() => deleteFileMutation.mutate({ id: file.id })}
+                              className="p-1.5 rounded hover:bg-background transition-colors text-muted-foreground hover:text-destructive"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           )}
 
