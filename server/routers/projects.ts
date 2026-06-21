@@ -40,6 +40,9 @@ import {
   getWeeklyReportsByUser,
   getFinancialByProjectId,
   upsertFinancial,
+  getChecklistItemById,
+  logChecklistActivity,
+  getChecklistActivityBetween,
 } from "../db";
 import { protectedProcedure, router } from "../_core/trpc";
 import { generateSchedulePDF, ScheduleData, generateProjectsListPDF, ProjectsListData, ProjectsListPDFOptions } from "../_core/pdfGenerator";
@@ -96,7 +99,127 @@ const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
   return next({ ctx });
 });
 
+/** The reporting week runs Wednesday 00:00 → Tuesday 23:59 (Tuesday is the last day). */
+function getWeekWindow(reference?: Date): { weekStart: Date; weekEnd: Date } {
+  const now = reference ?? new Date();
+  const daysSinceWednesday = (now.getDay() - 3 + 7) % 7;
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - daysSinceWednesday);
+  weekStart.setHours(0, 0, 0, 0);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  weekEnd.setHours(23, 59, 59, 999);
+  return { weekStart, weekEnd };
+}
+
 export const projectsRouter = router({
+  // Progress page: projects with checklist activity (completion/progress on
+  // extracted items) since last Wednesday, with their completion %.
+  weeklyActiveProjects: adminProcedure.query(async () => {
+    const { weekStart, weekEnd } = getWeekWindow();
+    const activity = await getChecklistActivityBetween(weekStart, weekEnd);
+    const seen = new Set<number>();
+    const projectIds: number[] = [];
+    for (const a of activity) {
+      if (!seen.has(a.projectId)) {
+        seen.add(a.projectId);
+        projectIds.push(a.projectId);
+      }
+    }
+    const result = [];
+    for (const pid of projectIds) {
+      const project = await getProjectById(pid);
+      if (!project) continue;
+      const items = await getChecklistItemsForProject(pid);
+      const extracted = items.filter((i) => i.source === "extracted");
+      const totalCount = extracted.length;
+      const completedCount = extracted.filter((i) => i.isCompleted).length;
+      const completionPercentage = totalCount
+        ? Math.round(extracted.reduce((s, i) => s + (i.progress ?? 0), 0) / totalCount)
+        : 0;
+      const actionCount = activity.filter((a) => a.projectId === pid).length;
+      result.push({
+        id: project.id,
+        name: project.name,
+        status: project.status,
+        completionPercentage,
+        completedCount,
+        totalCount,
+        actionCount,
+      });
+    }
+    result.sort((a, b) => a.name.localeCompare(b.name));
+    return result;
+  }),
+
+  // Progress page: weekly checklist progress report PDF (all active projects, or one).
+  generateChecklistProgressReport: adminProcedure
+    .input(z.object({ projectId: z.number().optional() }).optional())
+    .mutation(async ({ input }) => {
+      const { weekStart, weekEnd } = getWeekWindow();
+      const activity = await getChecklistActivityBetween(weekStart, weekEnd, input?.projectId);
+
+      const order: number[] = [];
+      const byProject: Record<number, typeof activity> = {};
+      for (const a of activity) {
+        if (!byProject[a.projectId]) {
+          byProject[a.projectId] = [];
+          order.push(a.projectId);
+        }
+        byProject[a.projectId].push(a);
+      }
+
+      const projectsData = [];
+      let totalActions = 0;
+      for (const pid of order) {
+        const acts = byProject[pid];
+        const project = await getProjectById(pid);
+        if (!project) continue;
+        const items = await getChecklistItemsForProject(pid);
+        const extracted = items.filter((i) => i.source === "extracted");
+        const totalCount = extracted.length;
+        const completedCount = extracted.filter((i) => i.isCompleted).length;
+        const completionPercentage = totalCount
+          ? Math.round(extracted.reduce((s, i) => s + (i.progress ?? 0), 0) / totalCount)
+          : 0;
+        projectsData.push({
+          id: project.id,
+          name: project.name,
+          status: project.status,
+          completionPercentage,
+          completedCount,
+          totalCount,
+          activities: acts.map((a) => ({
+            createdAt: a.createdAt,
+            itemText: a.itemText,
+            action: a.action,
+            progress: a.progress,
+            actorName: a.actorName,
+          })),
+        });
+        totalActions += acts.length;
+      }
+      projectsData.sort((a, b) => a.name.localeCompare(b.name));
+
+      const { generateChecklistProgressPDF } = await import("../_core/pdfGenerator");
+      const pdfBuffer = await generateChecklistProgressPDF({
+        weekStart,
+        weekEnd,
+        generatedAt: new Date(),
+        totalActions,
+        projects: projectsData,
+      });
+
+      const fileName = `Progress_Report_${weekStart.toISOString().split("T")[0]}.pdf`;
+      return {
+        success: true,
+        pdfBase64: pdfBuffer.toString("base64"),
+        fileName,
+        totalProjects: projectsData.length,
+        totalActions,
+      };
+    }),
+
   // Admin: list all projects with optional filters
   list: adminProcedure
     .input(
@@ -391,37 +514,56 @@ export const projectsRouter = router({
       const { projectId, itemId, isCompleted, text, progress } = input;
 
       // Build the update; progress drives completion (100% = complete).
-      const buildPatch = () => {
-        const patch: { isCompleted?: boolean; text?: string; progress?: number } = {};
-        if (text !== undefined) patch.text = text;
-        if (isCompleted !== undefined) patch.isCompleted = isCompleted;
-        if (progress !== undefined) {
-          patch.progress = progress;
-          patch.isCompleted = progress >= 100;
-        }
-        return patch;
-      };
-
-      // Admins can update anything
-      if (ctx.user.role === 'admin') {
-        await updateChecklistItem(itemId, buildPatch());
-        return { success: true };
+      const patch: { isCompleted?: boolean; text?: string; progress?: number } = {};
+      if (text !== undefined) patch.text = text;
+      if (isCompleted !== undefined) patch.isCompleted = isCompleted;
+      if (progress !== undefined) {
+        patch.progress = progress;
+        patch.isCompleted = progress >= 100;
       }
 
-      // Subcontractors: completion toggle and/or progress on their assigned project (no text edits)
-      if (text === undefined && (isCompleted !== undefined || progress !== undefined)) {
+      // Resolve actor + permission. Admins can do anything; subs may only toggle
+      // completion / set progress on their assigned project (no text edits).
+      let actorName = ctx.user.name ?? "Admin";
+      if (ctx.user.role !== 'admin') {
+        if (!(text === undefined && (isCompleted !== undefined || progress !== undefined))) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'You can only update completion or progress' });
+        }
         const subcontractor = await getSubcontractorByUserId(ctx.user.id);
         if (!subcontractor) throw new TRPCError({ code: 'FORBIDDEN' });
-
         const isAssigned = await isSubcontractorAssignedToProject(subcontractor.id, projectId);
         if (!isAssigned) throw new TRPCError({ code: 'FORBIDDEN' });
-
-        await updateChecklistItem(itemId, buildPatch());
-        return { success: true };
+        actorName = subcontractor.companyName;
       }
 
-      // Subcontractors cannot edit text or delete
-      throw new TRPCError({ code: 'FORBIDDEN', message: 'You can only update completion or progress' });
+      // Snapshot before, update, then log activity for EXTRACTED items only.
+      const before = await getChecklistItemById(itemId);
+      await updateChecklistItem(itemId, patch);
+
+      if (before && before.source === 'extracted') {
+        if (patch.progress !== undefined && patch.progress !== before.progress) {
+          await logChecklistActivity({
+            projectId,
+            itemId,
+            itemText: before.text,
+            action: 'progress_updated',
+            progress: patch.progress,
+            actorName,
+          });
+        }
+        if (patch.isCompleted !== undefined && patch.isCompleted !== before.isCompleted) {
+          await logChecklistActivity({
+            projectId,
+            itemId,
+            itemText: before.text,
+            action: patch.isCompleted ? 'completed' : 'reopened',
+            progress: patch.isCompleted ? (patch.progress ?? 100) : (patch.progress ?? before.progress),
+            actorName,
+          });
+        }
+      }
+
+      return { success: true };
     }),
 
   // Admin: delete checklist item

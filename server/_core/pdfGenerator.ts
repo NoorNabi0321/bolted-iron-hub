@@ -1,5 +1,170 @@
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 
+// ─── Weekly Checklist Progress Report ─────────────────────────────────────────
+export interface ChecklistProgressReportOptions {
+  weekStart: Date;
+  weekEnd: Date;
+  generatedAt: Date;
+  totalActions: number;
+  projects: Array<{
+    id: number;
+    name: string;
+    status: string;
+    completionPercentage: number;
+    completedCount: number;
+    totalCount: number;
+    activities: Array<{
+      createdAt: Date;
+      itemText: string;
+      action: string; // "completed" | "reopened" | "progress_updated"
+      progress: number | null;
+      actorName: string | null;
+    }>;
+  }>;
+}
+
+export async function generateChecklistProgressPDF(
+  options: ChecklistProgressReportOptions
+): Promise<Buffer> {
+  const { weekStart, weekEnd, generatedAt, totalActions, projects } = options;
+
+  const pdfDoc = await PDFDocument.create();
+  const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const pageWidth = 595;
+  const pageHeight = 842;
+  const margin = 40;
+  const contentWidth = pageWidth - 2 * margin;
+  const red = rgb(220 / 255, 38 / 255, 38 / 255);
+  const muted = rgb(120 / 255, 120 / 255, 120 / 255);
+
+  const sanitize = (text: unknown): string => {
+    if (text === null || text === undefined) return "";
+    return String(text)
+      .split("")
+      .map((ch) => {
+        const c = ch.charCodeAt(0);
+        if (c >= 32 && c <= 126) return ch;
+        if (ch === "–" || ch === "—") return "-";
+        if (ch === "’" || ch === "‘") return "'";
+        if (ch === "“" || ch === "”") return '"';
+        if (ch === "→") return "->";
+        return "";
+      })
+      .join("");
+  };
+
+  const fmtDate = (d: Date) =>
+    new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const fmtDateTime = (d: Date) =>
+    new Date(d).toLocaleString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+  const actionLabel = (a: ChecklistProgressReportOptions["projects"][number]["activities"][number]) => {
+    let item = sanitize(a.itemText);
+    if (item.length > 55) item = item.substring(0, 52) + "...";
+    if (a.action === "completed") return `Completed: "${item}"`;
+    if (a.action === "reopened") return `Reopened: "${item}"`;
+    return `Progress: "${item}" -> ${a.progress ?? 0}%`;
+  };
+
+  let page = pdfDoc.addPage([pageWidth, pageHeight]);
+  let y = pageHeight - margin;
+
+  const drawHeader = () => {
+    y = pageHeight - margin;
+    page.drawText(sanitize("Bolted Iron Hub"), { x: margin, y, size: 24, font: helveticaBold, color: red });
+    y -= 30;
+    page.drawLine({ start: { x: margin, y }, end: { x: pageWidth - margin, y }, thickness: 3, color: red });
+    y -= 18;
+    page.drawText(sanitize("Weekly Progress Report"), { x: margin, y, size: 15, font: helveticaBold, color: rgb(0, 0, 0) });
+    y -= 22;
+  };
+
+  const ensureSpace = (needed: number) => {
+    if (y - needed < margin) {
+      page = pdfDoc.addPage([pageWidth, pageHeight]);
+      drawHeader();
+    }
+  };
+
+  drawHeader();
+
+  for (const line of [
+    `Week: ${fmtDate(weekStart)} - ${fmtDate(weekEnd)}`,
+    `Active Projects: ${projects.length}    Total Actions: ${totalActions}`,
+    `Generated: ${fmtDateTime(generatedAt)}`,
+  ]) {
+    page.drawText(sanitize(line), { x: margin, y, size: 10, font: helvetica, color: rgb(60 / 255, 60 / 255, 60 / 255) });
+    y -= 15;
+  }
+  y -= 8;
+
+  if (projects.length === 0) {
+    page.drawText(sanitize("No checklist activity was recorded for this week."), {
+      x: margin,
+      y,
+      size: 11,
+      font: helvetica,
+      color: rgb(0, 0, 0),
+    });
+  }
+
+  for (const proj of projects) {
+    ensureSpace(64);
+    // Project header bar: name + status
+    page.drawRectangle({ x: margin, y: y - 22, width: contentWidth, height: 22, color: red });
+    page.drawText(sanitize(proj.name).substring(0, 55), {
+      x: margin + 6,
+      y: y - 15,
+      size: 11,
+      font: helveticaBold,
+      color: rgb(1, 1, 1),
+    });
+    const statusText = sanitize(proj.status);
+    const stWidth = helvetica.widthOfTextAtSize(statusText, 9);
+    page.drawText(statusText, { x: pageWidth - margin - stWidth - 6, y: y - 14, size: 9, font: helvetica, color: rgb(1, 1, 1) });
+    y -= 30;
+
+    // Completion line + bar
+    page.drawText(
+      sanitize(`Completion: ${proj.completionPercentage}%  (${proj.completedCount} of ${proj.totalCount} items complete)`),
+      { x: margin + 6, y, size: 9, font: helveticaBold, color: rgb(40 / 255, 40 / 255, 40 / 255) }
+    );
+    y -= 12;
+    const barWidth = contentWidth - 12;
+    page.drawRectangle({ x: margin + 6, y: y - 3, width: barWidth, height: 5, color: rgb(229 / 255, 231 / 255, 235 / 255) });
+    page.drawRectangle({
+      x: margin + 6,
+      y: y - 3,
+      width: (barWidth * proj.completionPercentage) / 100,
+      height: 5,
+      color: rgb(34 / 255, 197 / 255, 94 / 255),
+    });
+    y -= 16;
+
+    for (const act of proj.activities) {
+      ensureSpace(15);
+      page.drawText(sanitize(fmtDateTime(act.createdAt)), { x: margin + 6, y: y - 10, size: 8, font: helvetica, color: muted });
+      let label = sanitize(actionLabel(act));
+      if (act.actorName) label += ` (by ${sanitize(act.actorName)})`;
+      if (label.length > 88) label = label.substring(0, 85) + "...";
+      page.drawText(label, { x: margin + 135, y: y - 10, size: 9, font: helvetica, color: rgb(20 / 255, 20 / 255, 20 / 255) });
+      y -= 15;
+    }
+    y -= 12;
+  }
+
+  const bytes = await pdfDoc.save();
+  return Buffer.from(bytes);
+}
+
 export interface ScheduleData {
   date: Date;
   dayName: string;

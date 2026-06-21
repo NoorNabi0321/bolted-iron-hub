@@ -15,6 +15,7 @@ import {
   LogOut,
   Menu,
   Shield,
+  TrendingUp,
   UserCheck,
   Users,
   X,
@@ -30,6 +31,7 @@ import { ArrowLeft } from "lucide-react";
 const adminMenuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: FolderOpen, label: "Projects", path: "/projects" },
+  { icon: TrendingUp, label: "Progress", path: "/progress" },
   { icon: Building2, label: "Subcontractors", path: "/subcontractors" },
   { icon: Users, label: "Users", path: "/users" },
   { icon: Shield, label: "Permissions", path: "/permissions" },

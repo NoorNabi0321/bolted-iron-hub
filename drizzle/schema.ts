@@ -364,3 +364,24 @@ export const weeklyReports = mysqlTable("weekly_reports", {
 
 export type WeeklyReport = typeof weeklyReports.$inferSelect;
 export type InsertWeeklyReport = typeof weeklyReports.$inferInsert;
+
+// ─── Checklist Activity Log (extracted-item completions & progress changes) ───
+export const CHECKLIST_ACTIONS = ["completed", "reopened", "progress_updated"] as const;
+export type ChecklistAction = (typeof CHECKLIST_ACTIONS)[number];
+
+export const checklistActivity = mysqlTable("checklist_activity", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: int("projectId").notNull(),
+  itemId: int("itemId").notNull(),
+  /** Snapshot of the item text at the time, so reports stay readable if the item changes. */
+  itemText: text("itemText").notNull(),
+  action: mysqlEnum("action", CHECKLIST_ACTIONS).notNull(),
+  /** New progress value (0-100) for progress_updated / completed events; null otherwise. */
+  progress: int("progress"),
+  /** Who performed it (admin name or subcontractor company). */
+  actorName: varchar("actorName", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ChecklistActivity = typeof checklistActivity.$inferSelect;
+export type InsertChecklistActivity = typeof checklistActivity.$inferInsert;

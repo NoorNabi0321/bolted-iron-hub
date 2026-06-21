@@ -14,6 +14,8 @@ import AdminUsers from "./pages/admin/Users";
 import AdminPermissions from "./pages/admin/Permissions";
 import AdminApprovals from "./pages/admin/Approvals";
 import AdminBulkImport from "./pages/admin/BulkImport";
+import ProjectProgress from "./pages/admin/ProjectProgress";
+import ProjectProgressDetail from "./pages/admin/ProjectProgressDetail";
 import SubDashboard from "./pages/sub/Dashboard";
 import SubProjectDetail from "./pages/sub/ProjectDetail";
 import LoginPage from "./pages/Login";
@@ -49,6 +51,8 @@ function AppRouter() {
         <Route path="/permissions" component={AdminPermissions} />
         <Route path="/approvals" component={AdminApprovals} />
         <Route path="/bulk-import" component={AdminBulkImport} />
+        <Route path="/progress" component={ProjectProgress} />
+        <Route path="/progress/:id" component={ProjectProgressDetail} />
         <Route component={NotFound} />
       </Switch>
     );

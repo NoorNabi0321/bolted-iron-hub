@@ -32,6 +32,7 @@ import {
   projectChecklistItems,
   weeklyReports,
 } from "../drizzle/schema";
+import { checklistActivity, type InsertChecklistActivity, type ChecklistActivity } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -837,5 +838,48 @@ export async function getWeeklyReportsByUser(userId: number): Promise<WeeklyRepo
     .from(weeklyReports)
     .where(eq(weeklyReports.generatedBy, userId))
     .orderBy(desc(weeklyReports.reportDate));
+}
+
+// ─── Checklist Activity Log ──────────────────────────────────────────────────
+export async function getChecklistItemById(id: number): Promise<ProjectChecklistItem | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db
+    .select()
+    .from(projectChecklistItems)
+    .where(eq(projectChecklistItems.id, id))
+    .limit(1);
+  return result[0];
+}
+
+/** Append a checklist-activity row. Never throws — logging must not break the action. */
+export async function logChecklistActivity(data: InsertChecklistActivity): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  try {
+    await db.insert(checklistActivity).values(data);
+  } catch (error) {
+    console.warn("[ChecklistActivity] Failed to log:", error);
+  }
+}
+
+/** Checklist activity in [from, to], optionally one project, ordered by project then time. */
+export async function getChecklistActivityBetween(
+  from: Date,
+  to: Date,
+  projectId?: number
+): Promise<ChecklistActivity[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [
+    gte(checklistActivity.createdAt, from),
+    lte(checklistActivity.createdAt, to),
+  ];
+  if (projectId !== undefined) conditions.push(eq(checklistActivity.projectId, projectId));
+  return db
+    .select()
+    .from(checklistActivity)
+    .where(and(...conditions))
+    .orderBy(checklistActivity.projectId, checklistActivity.createdAt);
 }
 
