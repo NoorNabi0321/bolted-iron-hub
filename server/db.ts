@@ -852,6 +852,13 @@ export async function getChecklistItemById(id: number): Promise<ProjectChecklist
   return result[0];
 }
 
+export async function getChangeOrderById(id: number): Promise<ChangeOrder | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(changeOrders).where(eq(changeOrders.id, id)).limit(1);
+  return result[0];
+}
+
 /** Append a checklist-activity row. Never throws — logging must not break the action. */
 export async function logChecklistActivity(data: InsertChecklistActivity): Promise<void> {
   const db = await getDb();

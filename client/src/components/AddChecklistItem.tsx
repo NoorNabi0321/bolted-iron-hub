@@ -19,6 +19,10 @@ interface AddChecklistItemProps {
   onItemAdded?: () => void;
   /** Which list the new item belongs to. Defaults to the manual checklist. */
   source?: "manual" | "extracted";
+  /** Mark the new item as user-added (shown green + active). */
+  isUserAdded?: boolean;
+  /** Custom trigger button label. */
+  label?: string;
 }
 
 export function AddChecklistItem({
@@ -26,6 +30,8 @@ export function AddChecklistItem({
   maxOrder,
   onItemAdded,
   source = "manual",
+  isUserAdded = false,
+  label,
 }: AddChecklistItemProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [itemText, setItemText] = useState("");
@@ -54,6 +60,8 @@ export function AddChecklistItem({
       order: maxOrder + 1,
       isCompleted: false,
       source,
+      isActive: true,
+      isUserAdded,
     });
   };
 

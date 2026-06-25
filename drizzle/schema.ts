@@ -187,6 +187,8 @@ export const changeOrders = mysqlTable("change_orders", {
   createdBy: varchar("createdBy", { length: 255 }),
   approvedBy: varchar("approvedBy", { length: 255 }),
   notes: text("notes"),
+  /** When true, approving this change order creates a green checklist item from its description. */
+  isChecklistItem: boolean("isChecklistItem").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   approvedAt: timestamp("approvedAt"),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -234,6 +236,10 @@ export const projectChecklistItems = mysqlTable("project_checklist_items", {
   isCompleted: boolean("isCompleted").default(false).notNull(),
   /** Manual work-progress 0–100 (reported by the assigned sub or an admin). 100 = complete. */
   progress: int("progress").default(0).notNull(),
+  /** Active = worked on (black/green + slider). Inactive extracted items are greyed out. */
+  isActive: boolean("isActive").default(true).notNull(),
+  /** True for items added by hand or via an approved change order (shown green). */
+  isUserAdded: boolean("isUserAdded").default(false).notNull(),
   order: int("order").notNull(),
   source: mysqlEnum("source", ["manual", "extracted"]).default("manual").notNull(),
   assignedSubcontractorId: int("assignedSubcontractorId"),

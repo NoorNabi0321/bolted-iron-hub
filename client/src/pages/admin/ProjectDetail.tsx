@@ -88,6 +88,8 @@ export default function AdminProjectDetail() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [editItemText, setEditItemText] = useState("");
+  const [coDialogOpen, setCoDialogOpen] = useState(false);
+  const [coForm, setCoForm] = useState({ orderNumber: "", description: "", amount: "", notes: "" });
 
   const utils = trpc.useUtils();
 
@@ -206,6 +208,31 @@ export default function AdminProjectDetail() {
     },
   });
 
+  const createChangeOrderItemMutation = trpc.changeOrders.create.useMutation({
+    onSuccess: () => {
+      utils.changeOrders.list.invalidate({ projectId });
+      setCoDialogOpen(false);
+      setCoForm({ orderNumber: "", description: "", amount: "", notes: "" });
+      toast.success("Change order submitted for approval. Once approved it will be added to the checklist.");
+    },
+    onError: (error) => toast.error(error.message || "Failed to submit change order"),
+  });
+
+  const handleCreateChangeOrderItem = () => {
+    if (!coForm.orderNumber.trim() || !coForm.description.trim()) {
+      toast.error("Order number and description are required");
+      return;
+    }
+    createChangeOrderItemMutation.mutate({
+      projectId,
+      orderNumber: coForm.orderNumber.trim(),
+      description: coForm.description.trim(),
+      amount: coForm.amount.trim() || "0",
+      notes: coForm.notes.trim() || undefined,
+      isChecklistItem: true,
+    });
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.currentTarget.files?.[0];
     if (!file) return;
@@ -255,6 +282,14 @@ export default function AdminProjectDetail() {
 
   const assignedSubIds = assignments.map((a) => a.subcontractorId);
   const unassignedSubs = subs.filter((s) => !assignedSubIds.includes(s.id));
+
+  // Only active extracted items count toward progress.
+  const activeChecklistItems = checklistItems.filter((i) => i.isActive);
+  const activeCompletedCount = activeChecklistItems.filter((i) => i.isCompleted).length;
+  const activeProgressPct =
+    activeChecklistItems.length > 0
+      ? Math.round((activeCompletedCount / activeChecklistItems.length) * 100)
+      : 0;
 
   // Tab definitions
   const tabs: TabItem[] = [
@@ -625,12 +660,25 @@ export default function AdminProjectDetail() {
                       <FileText className="h-4 w-4 md:h-5 md:w-5 text-red-600" />
                       <span className="truncate">Extracted Checklist & Tasks</span>
                     </CardTitle>
-                    <AddChecklistItem
-                      projectId={projectId}
-                      source="extracted"
-                      maxOrder={checklistItems.reduce((m, i) => Math.max(m, i.order), 0)}
-                      onItemAdded={() => utils.projects.getChecklistItems.invalidate({ projectId })}
-                    />
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <AddChecklistItem
+                        projectId={projectId}
+                        source="extracted"
+                        isUserAdded
+                        maxOrder={checklistItems.reduce((m, i) => Math.max(m, i.order), 0)}
+                        onItemAdded={() => utils.projects.getChecklistItems.invalidate({ projectId })}
+                      />
+                      <Button
+                        onClick={() => setCoDialogOpen(true)}
+                        variant="outline"
+                        size="sm"
+                        className="gap-1 md:gap-2 px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm"
+                      >
+                        <Plus className="w-3 h-3 md:w-4 md:h-4" />
+                        <span className="hidden md:inline">Change Order</span>
+                        <span className="md:hidden">CO</span>
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
 
@@ -639,9 +687,8 @@ export default function AdminProjectDetail() {
                     <div className="min-w-0 flex-1">
                       <p className="text-xs md:text-sm font-medium text-gray-700 truncate">From Proposal PDF</p>
                       <p className="text-xs text-gray-500 mt-0.5 md:mt-1 truncate">
-                        {checklistItems.length} of {checklistItems.length} items
-                        {checklistItems.length > 0 &&
-                          ` (${Math.round((checklistItems.filter((i) => i.isCompleted).length / checklistItems.length) * 100)}% complete)`}
+                        {activeChecklistItems.length} active of {checklistItems.length} items
+                        {activeChecklistItems.length > 0 && ` (${activeProgressPct}% complete)`}
                       </p>
                     </div>
                   </div>
@@ -661,30 +708,37 @@ export default function AdminProjectDetail() {
                         <div className="flex items-center justify-between mb-2 gap-2">
                           <span className="text-xs md:text-sm font-medium text-gray-700 flex-shrink-0">Progress</span>
                           <span className="text-xs md:text-sm font-semibold text-gray-900 text-right">
-                            {checklistItems.filter((i) => i.isCompleted).length} of {checklistItems.length} items complete ({Math.round((checklistItems.filter((i) => i.isCompleted).length / checklistItems.length) * 100)}%)
+                            {activeCompletedCount} of {activeChecklistItems.length} active complete ({activeProgressPct}%)
                           </span>
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-2">
                           <div
                             className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${Math.round((checklistItems.filter((i) => i.isCompleted).length / checklistItems.length) * 100)}%` }}
+                            style={{ width: `${activeProgressPct}%` }}
                           />
                         </div>
                       </div>
 
                       {/* Checklist Items */}
                       <div className="space-y-1.5 md:space-y-2">
-                        {checklistItems.map((item) => (
+                        {checklistItems.map((item) => {
+                          const inactive = !item.isActive;
+                          return (
                           <div
                             key={item.id}
                             className={`p-3 md:p-4 rounded-lg border transition-all ${
-                              item.isCompleted
+                              inactive
+                                ? "bg-gray-50/60 border-dashed border-gray-300"
+                                : item.isCompleted
                                 ? "bg-gray-50 border-gray-200"
+                                : item.isUserAdded
+                                ? "bg-green-50/40 border-green-200"
                                 : "bg-white border-gray-200 hover:border-gray-300"
                             }`}
                           >
                             <div className="flex items-center gap-2 md:gap-3">
-                            {/* Tick Icon */}
+                            {/* Tick Icon — only active items can be completed */}
+                            {!inactive && (
                             <button
                               onClick={() =>
                                 updateChecklistMutation.mutate({
@@ -702,8 +756,9 @@ export default function AdminProjectDetail() {
                                 <Circle className="w-4 h-4 md:w-5 md:h-5 text-gray-400 hover:text-gray-600" />
                               )}
                             </button>
+                            )}
 
-                            {/* Item Text (inline editable) */}
+                            {/* Item Text (inline editable; tap greyed item to activate) */}
                             <div className="flex-1 min-w-0">
                               {editingItemId === item.id ? (
                                 <input
@@ -717,11 +772,29 @@ export default function AdminProjectDetail() {
                                   autoFocus
                                   className="w-full px-2 py-1 border border-gray-300 rounded-md text-xs md:text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
                                 />
+                              ) : inactive ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateChecklistMutation.mutate({ projectId, itemId: item.id, isActive: true })
+                                  }
+                                  className="group flex items-center gap-2 text-left w-full"
+                                  title="Tap to activate this item"
+                                >
+                                  <span className="text-xs md:text-sm break-words text-gray-400 group-hover:text-gray-700">
+                                    {item.text}
+                                  </span>
+                                  <span className="text-[10px] md:text-xs text-gray-400 italic flex-shrink-0 group-hover:text-gray-600">
+                                    tap to activate
+                                  </span>
+                                </button>
                               ) : (
                                 <p
                                   className={`text-xs md:text-sm break-words ${
                                     item.isCompleted
                                       ? "line-through text-gray-400"
+                                      : item.isUserAdded
+                                      ? "text-green-700 font-medium"
                                       : "text-gray-900"
                                   }`}
                                 >
@@ -730,7 +803,8 @@ export default function AdminProjectDetail() {
                               )}
                             </div>
 
-                            {/* Subcontractor Assignment Dropdown */}
+                            {/* Subcontractor Assignment Dropdown — only active items */}
+                            {!inactive && (
                             <Select
                               value={item.assignedSubcontractorId?.toString() || "unassigned"}
                               onValueChange={(value) => {
@@ -754,6 +828,7 @@ export default function AdminProjectDetail() {
                                 ))}
                               </SelectContent>
                             </Select>
+                            )}
 
                             {/* Edit / Save / Cancel */}
                             {editingItemId === item.id ? (
@@ -795,6 +870,8 @@ export default function AdminProjectDetail() {
                               <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
                             </button>
                             </div>
+                            {/* Progress slider — only active items */}
+                            {!inactive && (
                             <div className="mt-3 px-1">
                               <ChecklistProgressSlider
                                 value={item.progress ?? 0}
@@ -803,13 +880,90 @@ export default function AdminProjectDetail() {
                                 }
                               />
                             </div>
+                            )}
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
                 </CardContent>
               </Card>
+
+              {/* Change Order dialog — adds an item to the checklist once approved */}
+              <Dialog open={coDialogOpen} onOpenChange={setCoDialogOpen}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>New Change Order</DialogTitle>
+                  </DialogHeader>
+                  <p className="text-sm text-muted-foreground -mt-2">
+                    This item goes to the Change Orders section for approval. Once approved it is
+                    automatically added to the checklist (green, active, with a progress slider).
+                  </p>
+                  <div className="space-y-4 py-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="co-number">Order Number</Label>
+                      <Input
+                        id="co-number"
+                        placeholder="e.g. CO-001"
+                        value={coForm.orderNumber}
+                        onChange={(e) => setCoForm((f) => ({ ...f, orderNumber: e.target.value }))}
+                        disabled={createChangeOrderItemMutation.isPending}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="co-desc">Description (becomes the checklist item)</Label>
+                      <Textarea
+                        id="co-desc"
+                        placeholder="Describe the work / item..."
+                        value={coForm.description}
+                        onChange={(e) => setCoForm((f) => ({ ...f, description: e.target.value }))}
+                        disabled={createChangeOrderItemMutation.isPending}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="co-amount">Amount</Label>
+                      <Input
+                        id="co-amount"
+                        type="number"
+                        placeholder="0.00"
+                        value={coForm.amount}
+                        onChange={(e) => setCoForm((f) => ({ ...f, amount: e.target.value }))}
+                        disabled={createChangeOrderItemMutation.isPending}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="co-notes">Notes (optional)</Label>
+                      <Textarea
+                        id="co-notes"
+                        placeholder="Additional notes..."
+                        value={coForm.notes}
+                        onChange={(e) => setCoForm((f) => ({ ...f, notes: e.target.value }))}
+                        disabled={createChangeOrderItemMutation.isPending}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setCoDialogOpen(false)}
+                      disabled={createChangeOrderItemMutation.isPending}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={handleCreateChangeOrderItem}
+                      disabled={createChangeOrderItemMutation.isPending}
+                      className="gap-2"
+                    >
+                      {createChangeOrderItemMutation.isPending && (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      )}
+                      Submit for Approval
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
 
               {/* Section 2: Change Orders */}
               <Card className="bg-card border-border">

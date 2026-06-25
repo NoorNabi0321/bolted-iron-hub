@@ -26,10 +26,16 @@ interface ProjectChecklistProps {
 export function ProjectChecklist({ projectId, source = "manual" }: ProjectChecklistProps) {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
-  const { data: items = [], isLoading, refetch } = trpc.projects.getChecklistItems.useQuery({
+  const { data: allItems = [], isLoading, refetch } = trpc.projects.getChecklistItems.useQuery({
     projectId,
     source,
   });
+
+  // Extracted items must be activated before subcontractors work them.
+  const items =
+    source === "extracted"
+      ? allItems.filter((i) => (i as { isActive?: boolean }).isActive)
+      : allItems;
 
   const maxOrder = items.length > 0 ? Math.max(...items.map((item) => item.order)) : 0;
 

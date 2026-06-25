@@ -14,11 +14,13 @@ export default function ProjectProgressDetail() {
   const [, navigate] = useLocation();
 
   const { data: project } = trpc.projects.get.useQuery({ id: projectId });
-  const { data: items = [] } = trpc.projects.getChecklistItems.useQuery({ projectId, source: "extracted" });
+  const { data: allItems = [] } = trpc.projects.getChecklistItems.useQuery({ projectId, source: "extracted" });
   const generateReport = trpc.projects.generateChecklistProgressReport.useMutation();
   const [isGenerating, setIsGenerating] = useState(false);
   const [report, setReport] = useState<any>(null);
 
+  // Only active items count toward progress.
+  const items = allItems.filter((i) => (i as { isActive?: boolean }).isActive);
   const totalCount = items.length;
   const completedCount = items.filter((i) => i.isCompleted).length;
   const completionPercentage = totalCount

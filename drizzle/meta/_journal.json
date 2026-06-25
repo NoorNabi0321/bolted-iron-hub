@@ -134,6 +134,13 @@
       "when": 1782024874960,
       "tag": "0018_bored_eternity",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1782362850084,
+      "tag": "0019_hard_jasper_sitwell",
+      "breakpoints": true
     }
   ]
 }

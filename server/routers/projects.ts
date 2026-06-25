@@ -131,7 +131,7 @@ export const projectsRouter = router({
       const project = await getProjectById(pid);
       if (!project) continue;
       const items = await getChecklistItemsForProject(pid);
-      const extracted = items.filter((i) => i.source === "extracted");
+      const extracted = items.filter((i) => i.source === "extracted" && i.isActive);
       const totalCount = extracted.length;
       const completedCount = extracted.filter((i) => i.isCompleted).length;
       const completionPercentage = totalCount
@@ -176,7 +176,7 @@ export const projectsRouter = router({
         const project = await getProjectById(pid);
         if (!project) continue;
         const items = await getChecklistItemsForProject(pid);
-        const extracted = items.filter((i) => i.source === "extracted");
+        const extracted = items.filter((i) => i.source === "extracted" && i.isActive);
         const totalCount = extracted.length;
         const completedCount = extracted.filter((i) => i.isCompleted).length;
         const completionPercentage = totalCount
@@ -465,6 +465,8 @@ export const projectsRouter = router({
         order: z.number().optional(),
         isCompleted: z.boolean().optional(),
         source: z.enum(["manual", "extracted"]).optional().default("manual"),
+        isActive: z.boolean().optional(),
+        isUserAdded: z.boolean().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -474,6 +476,8 @@ export const projectsRouter = router({
         isCompleted: input.isCompleted ?? false,
         order: input.order ?? 0,
         source: input.source,
+        isActive: input.isActive ?? true,
+        isUserAdded: input.isUserAdded ?? false,
       });
     }),
 
@@ -513,19 +517,22 @@ export const projectsRouter = router({
         isCompleted: z.boolean().optional(),
         text: z.string().optional(),
         progress: z.number().min(0).max(100).optional(),
+        isActive: z.boolean().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const { projectId, itemId, isCompleted, text, progress } = input;
+      const { projectId, itemId, isCompleted, text, progress, isActive } = input;
 
       // Build the update; progress drives completion (100% = complete).
-      const patch: { isCompleted?: boolean; text?: string; progress?: number } = {};
+      const patch: { isCompleted?: boolean; text?: string; progress?: number; isActive?: boolean } = {};
       if (text !== undefined) patch.text = text;
       if (isCompleted !== undefined) patch.isCompleted = isCompleted;
       if (progress !== undefined) {
         patch.progress = progress;
         patch.isCompleted = progress >= 100;
       }
+      // Activation (pressing an extracted item) is admin-only.
+      if (isActive !== undefined && ctx.user.role === "admin") patch.isActive = isActive;
 
       // Resolve actor + permission. Admins can do anything; subs may only toggle
       // completion / set progress on their assigned project (no text edits).
@@ -1037,6 +1044,8 @@ export const projectsRouter = router({
             isCompleted: false,
             order: index,
             source: "extracted",
+            isActive: false,
+            isUserAdded: false,
           });
           savedItems.push(id);
         }

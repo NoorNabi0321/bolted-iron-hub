@@ -34,7 +34,9 @@ export function ProjectChangeOrders({ projectId }: { projectId: number }) {
   const approveMutation = trpc.changeOrders.approve.useMutation({
     onSuccess: () => {
       utils.changeOrders.list.invalidate({ projectId });
-      toast.success("Change order approved");
+      // Approval adds the order to the checklist — refresh it too.
+      utils.projects.getChecklistItems.invalidate({ projectId });
+      toast.success("Change order approved & added to checklist");
     },
   });
 

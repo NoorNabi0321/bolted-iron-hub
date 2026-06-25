@@ -2,8 +2,11 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   createChangeOrder,
+  createChecklistItem,
   deleteChangeOrder,
+  getChangeOrderById,
   getChangeOrdersForProject,
+  getChecklistItemsForProject,
   updateChangeOrder,
 } from "../db";
 import { protectedProcedure, router } from "../_core/trpc";
@@ -28,6 +31,7 @@ export const changeOrdersRouter = router({
         description: z.string().min(1),
         amount: z.string(),
         notes: z.string().optional(),
+        isChecklistItem: z.boolean().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -39,6 +43,7 @@ export const changeOrdersRouter = router({
         status: "pending",
         createdBy: ctx.user.name ?? "Unknown",
         notes: input.notes,
+        isChecklistItem: input.isChecklistItem ?? false,
       });
       return { id };
     }),
@@ -46,11 +51,30 @@ export const changeOrdersRouter = router({
   approve: adminProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
+      // Snapshot before approving so we only add the checklist item once.
+      const order = await getChangeOrderById(input.id);
       await updateChangeOrder(input.id, {
         status: "approved",
         approvedBy: ctx.user.name ?? "Unknown",
         approvedAt: new Date(),
       });
+      // On first approval, add the change order to the checklist as a green,
+      // active item showing only the description + inches.
+      if (order && order.status !== "approved") {
+        const items = await getChecklistItemsForProject(order.projectId);
+        const maxOrder = items.reduce((m, i) => Math.max(m, i.order), 0);
+        const inches = Number(order.amount ?? 0).toFixed(2);
+        await createChecklistItem({
+          projectId: order.projectId,
+          text: `${order.description} — ${inches} in`,
+          isCompleted: false,
+          progress: 0,
+          order: maxOrder + 1,
+          source: "extracted",
+          isActive: true,
+          isUserAdded: true,
+        });
+      }
       return { success: true };
     }),
 
