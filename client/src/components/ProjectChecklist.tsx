@@ -31,13 +31,14 @@ export function ProjectChecklist({ projectId, source = "manual" }: ProjectCheckl
     source,
   });
 
-  // Extracted items must be activated before subcontractors work them.
-  const items =
+  // Extracted items must be activated before subcontractors work them; hide
+  // inactive ones. Legacy rows without the flag default to visible.
+  const visibleItems =
     source === "extracted"
-      ? allItems.filter((i) => (i as { isActive?: boolean }).isActive)
+      ? allItems.filter((item) => (item as { isActive?: boolean }).isActive ?? true)
       : allItems;
 
-  const maxOrder = items.length > 0 ? Math.max(...items.map((item) => item.order)) : 0;
+  const maxOrder = visibleItems.length > 0 ? Math.max(...visibleItems.map((item) => item.order)) : 0;
 
   const handleItemsChange = () => {
     refetch();
@@ -60,16 +61,16 @@ export function ProjectChecklist({ projectId, source = "manual" }: ProjectCheckl
           <div className="min-w-0 flex-1">
             <p className="text-xs md:text-sm font-medium text-gray-700 truncate">Project Checklist</p>
             <p className="text-xs text-gray-500 mt-0.5 md:mt-1 truncate">
-              {items.length} of {items.length} items
-              {items.length > 0 &&
-                ` (${Math.round((items.filter((i) => i.isCompleted).length / items.length) * 100)}% complete)`}
+              {visibleItems.length} of {visibleItems.length} items
+              {visibleItems.length > 0 &&
+                ` (${Math.round((visibleItems.filter((i) => i.isCompleted).length / visibleItems.length) * 100)}% complete)`}
             </p>
           </div>
         </div>
 
         <ChecklistViewMode
           projectId={projectId}
-          items={items}
+          items={visibleItems}
           isLoading={isLoading}
           onItemsChange={handleItemsChange}
           showProgress={source === "extracted"}
