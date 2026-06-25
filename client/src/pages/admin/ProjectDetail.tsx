@@ -76,58 +76,7 @@ export default function AdminProjectDetail() {
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = usePersistedState<TabType>(`bih:proj:${projectId}:tab`, "project-info");
   const contentRef = useRef<HTMLDivElement>(null);
-  const touchStartX = useRef(0);
-  const touchStartY = useRef(0);
-  const touchEndX = useRef(0);
-  const touchEndY = useRef(0);
-  const tabOrder: TabType[] = ["project-info", "checklist", "files", "financial"];
-  
-  // Handle swipe gestures
-  useEffect(() => {
-    const handleTouchStart = (e: TouchEvent) => {
-      touchStartX.current = e.changedTouches[0].screenX;
-      touchStartY.current = e.changedTouches[0].screenY;
-    };
-    
-    const handleTouchEnd = (e: TouchEvent) => {
-      touchEndX.current = e.changedTouches[0].screenX;
-      touchEndY.current = e.changedTouches[0].screenY;
-      handleSwipe();
-    };
-    
-    const handleSwipe = () => {
-      const swipeThreshold = 50;
-      const horizontalDiff = touchStartX.current - touchEndX.current;
-      const verticalDiff = Math.abs(touchStartY.current - touchEndY.current);
-      const horizontalDiffAbs = Math.abs(horizontalDiff);
-      
-      // Only trigger swipe if horizontal movement is significantly greater than vertical
-      // Ratio of 1.5 means horizontal movement must be 1.5x greater than vertical
-      if (horizontalDiffAbs > swipeThreshold && horizontalDiffAbs > verticalDiff * 1.5) {
-        const currentIndex = tabOrder.indexOf(activeTab);
-        
-        if (horizontalDiff > 0 && currentIndex < tabOrder.length - 1) {
-          // Swiped left, go to next tab
-          setActiveTab(tabOrder[currentIndex + 1]);
-        } else if (horizontalDiff < 0 && currentIndex > 0) {
-          // Swiped right, go to previous tab
-          setActiveTab(tabOrder[currentIndex - 1]);
-        }
-      }
-    };
-    
-    const element = contentRef.current;
-    if (element) {
-      element.addEventListener("touchstart", handleTouchStart, false);
-      element.addEventListener("touchend", handleTouchEnd, false);
-      
-      return () => {
-        element.removeEventListener("touchstart", handleTouchStart);
-        element.removeEventListener("touchend", handleTouchEnd);
-      };
-    }
-  }, [activeTab]);
-  
+
   // Use browser history to go back
   const handleBack = () => {
     window.history.back();

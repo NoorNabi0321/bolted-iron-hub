@@ -13,6 +13,7 @@ export interface ChecklistProgressReportOptions {
     completionPercentage: number;
     completedCount: number;
     totalCount: number;
+    items: Array<{ text: string; progress: number; isCompleted: boolean }>;
     activities: Array<{
       createdAt: Date;
       itemText: string;
@@ -116,12 +117,29 @@ export async function generateChecklistProgressPDF(
     });
   }
 
+  // Shared layout columns (consistent indentation + alignment across projects).
+  const labelX = margin + 8;       // section labels + total
+  const rowX = margin + 18;        // item text, item bars, action timestamps
+  const actionDescX = margin + 140; // action description column
+  const pctRight = pageWidth - margin; // right edge for % (right-aligned) and bars
+  const barRight = pctRight - 42;  // bars end here, leaving room for the %
+  const dark = rgb(40 / 255, 40 / 255, 40 / 255);
+  const dark2 = rgb(25 / 255, 25 / 255, 25 / 255);
+  const barBg = rgb(229 / 255, 231 / 255, 235 / 255);
+  const green = rgb(34 / 255, 197 / 255, 94 / 255);
+
+  const fitText = (text: string, font: typeof helvetica, size: number, maxWidth: number) => {
+    let t = text;
+    while (t.length > 0 && font.widthOfTextAtSize(t, size) > maxWidth) t = t.slice(0, -1);
+    return t;
+  };
+
   for (const proj of projects) {
-    ensureSpace(64);
-    // Project header bar: name + status
+    ensureSpace(72);
+    // Project header bar: name (left) + status (right)
     page.drawRectangle({ x: margin, y: y - 22, width: contentWidth, height: 22, color: red });
-    page.drawText(sanitize(proj.name).substring(0, 55), {
-      x: margin + 6,
+    page.drawText(fitText(sanitize(proj.name), helveticaBold, 11, contentWidth - 110), {
+      x: labelX,
       y: y - 15,
       size: 11,
       font: helveticaBold,
@@ -129,36 +147,57 @@ export async function generateChecklistProgressPDF(
     });
     const statusText = sanitize(proj.status);
     const stWidth = helvetica.widthOfTextAtSize(statusText, 9);
-    page.drawText(statusText, { x: pageWidth - margin - stWidth - 6, y: y - 14, size: 9, font: helvetica, color: rgb(1, 1, 1) });
-    y -= 30;
+    page.drawText(statusText, { x: pageWidth - margin - stWidth - 8, y: y - 15, size: 9, font: helvetica, color: rgb(1, 1, 1) });
+    y -= 32;
 
-    // Completion line + bar
-    page.drawText(
-      sanitize(`Completion: ${proj.completionPercentage}%  (${proj.completedCount} of ${proj.totalCount} items complete)`),
-      { x: margin + 6, y, size: 9, font: helveticaBold, color: rgb(40 / 255, 40 / 255, 40 / 255) }
-    );
-    y -= 12;
-    const barWidth = contentWidth - 12;
-    page.drawRectangle({ x: margin + 6, y: y - 3, width: barWidth, height: 5, color: rgb(229 / 255, 231 / 255, 235 / 255) });
-    page.drawRectangle({
-      x: margin + 6,
-      y: y - 3,
-      width: (barWidth * proj.completionPercentage) / 100,
-      height: 5,
-      color: rgb(34 / 255, 197 / 255, 94 / 255),
-    });
-    y -= 16;
-
-    for (const act of proj.activities) {
-      ensureSpace(15);
-      page.drawText(sanitize(fmtDateTime(act.createdAt)), { x: margin + 6, y: y - 10, size: 8, font: helvetica, color: muted });
-      let label = sanitize(actionLabel(act));
-      if (act.actorName) label += ` (by ${sanitize(act.actorName)})`;
-      if (label.length > 88) label = label.substring(0, 85) + "...";
-      page.drawText(label, { x: margin + 135, y: y - 10, size: 9, font: helvetica, color: rgb(20 / 255, 20 / 255, 20 / 255) });
-      y -= 15;
+    // Actions performed this week
+    if (proj.activities.length > 0) {
+      page.drawText(sanitize("Actions this week"), { x: labelX, y: y - 9, size: 9, font: helveticaBold, color: dark });
+      y -= 17;
+      for (const act of proj.activities) {
+        ensureSpace(15);
+        page.drawText(sanitize(fmtDateTime(act.createdAt)), { x: rowX, y: y - 9, size: 8, font: helvetica, color: muted });
+        let label = sanitize(actionLabel(act));
+        if (act.actorName) label += ` (by ${sanitize(act.actorName)})`;
+        page.drawText(fitText(label, helvetica, 9, pctRight - actionDescX), { x: actionDescX, y: y - 9, size: 9, font: helvetica, color: dark2 });
+        y -= 15;
+      }
+      y -= 8;
     }
-    y -= 12;
+
+    // Each checklist item with its progress line directly below it
+    if (proj.items.length > 0) {
+      ensureSpace(16);
+      page.drawText(sanitize("Checklist items"), { x: labelX, y: y - 9, size: 9, font: helveticaBold, color: dark });
+      y -= 17;
+      const itemBarW = barRight - rowX;
+      for (const item of proj.items) {
+        ensureSpace(24);
+        const itemLabel = fitText(sanitize((item.isCompleted ? "[x] " : "[ ] ") + item.text), helvetica, 9, barRight - rowX);
+        page.drawText(itemLabel, { x: rowX, y: y - 9, size: 9, font: helvetica, color: item.isCompleted ? muted : dark2 });
+        y -= 12;
+        // progress bar (same left edge as the item text)
+        page.drawRectangle({ x: rowX, y: y - 4, width: itemBarW, height: 4, color: barBg });
+        page.drawRectangle({ x: rowX, y: y - 4, width: (itemBarW * item.progress) / 100, height: 4, color: green });
+        const pctText = `${item.progress}%`;
+        const pctW = helveticaBold.widthOfTextAtSize(pctText, 8);
+        page.drawText(pctText, { x: pctRight - pctW, y: y - 6, size: 8, font: helveticaBold, color: dark });
+        y -= 14;
+      }
+      y -= 6;
+    }
+
+    // Overall total progress at the end of the project
+    ensureSpace(28);
+    page.drawText(
+      sanitize(`Total Progress: ${proj.completionPercentage}%   (${proj.completedCount} of ${proj.totalCount} items complete)`),
+      { x: labelX, y: y - 9, size: 10, font: helveticaBold, color: red }
+    );
+    y -= 16;
+    const totalBarW = barRight - labelX;
+    page.drawRectangle({ x: labelX, y: y - 4, width: totalBarW, height: 6, color: barBg });
+    page.drawRectangle({ x: labelX, y: y - 4, width: (totalBarW * proj.completionPercentage) / 100, height: 6, color: green });
+    y -= 26;
   }
 
   const bytes = await pdfDoc.save();

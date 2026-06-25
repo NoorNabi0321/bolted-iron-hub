@@ -189,6 +189,11 @@ export const projectsRouter = router({
           completionPercentage,
           completedCount,
           totalCount,
+          items: extracted.map((i) => ({
+            text: i.text,
+            progress: i.progress ?? 0,
+            isCompleted: i.isCompleted,
+          })),
           activities: acts.map((a) => ({
             createdAt: a.createdAt,
             itemText: a.itemText,
