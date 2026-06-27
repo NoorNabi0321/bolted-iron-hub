@@ -20,11 +20,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import {
   BILLING_STATUSES,
+  formatChecklistText,
   formatCurrency,
   formatDate,
   formatFileSize,
   formatTime,
   getBillingStatusColor,
+  nextCoNumber,
   PROJECT_STATUSES,
 } from "@/lib/utils";
 import {
@@ -65,6 +67,7 @@ import { ProposalUploadSection } from "@/components/ProposalUploadSection";
 import { ProjectChecklist } from "@/components/ProjectChecklist";
 import { ChecklistProgressSlider } from "@/components/ChecklistProgressSlider";
 import { AddChecklistItem } from "@/components/AddChecklistItem";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { TabCarousel, TabItem } from "@/components/TabCarousel";
 import CRMLayout from "@/components/CRMLayout";
 
@@ -90,6 +93,10 @@ export default function AdminProjectDetail() {
   const [editItemText, setEditItemText] = useState("");
   const [coDialogOpen, setCoDialogOpen] = useState(false);
   const [coForm, setCoForm] = useState({ orderNumber: "", description: "", amount: "", notes: "" });
+  const [pendingDelete, setPendingDelete] = useState<
+    | { kind: "note" | "checklist" | "file"; id: number; label: string }
+    | null
+  >(null);
 
   const utils = trpc.useUtils();
 
@@ -104,6 +111,9 @@ export default function AdminProjectDetail() {
   
   // For backward compatibility, use extracted items for the Files tab
   const checklistItems = extractedChecklistItems;
+
+  const { data: projectChangeOrders = [] } = trpc.changeOrders.list.useQuery({ projectId });
+  const nextCoOrderNumber = nextCoNumber(projectChangeOrders.map((o) => o.orderNumber));
 
   const [financialForm, setFinancialForm] = usePersistedState(`bih:proj:${projectId}:financialDraft`, {
     contractValue: "",
@@ -219,13 +229,13 @@ export default function AdminProjectDetail() {
   });
 
   const handleCreateChangeOrderItem = () => {
-    if (!coForm.orderNumber.trim() || !coForm.description.trim()) {
-      toast.error("Order number and description are required");
+    if (!coForm.description.trim()) {
+      toast.error("Description is required");
       return;
     }
     createChangeOrderItemMutation.mutate({
       projectId,
-      orderNumber: coForm.orderNumber.trim(),
+      orderNumber: nextCoOrderNumber,
       description: coForm.description.trim(),
       amount: coForm.amount.trim() || "0",
       notes: coForm.notes.trim() || undefined,
@@ -261,6 +271,16 @@ export default function AdminProjectDetail() {
     reader.readAsDataURL(file);
   };
 
+  const handleConfirmDelete = () => {
+    if (!pendingDelete) return;
+    if (pendingDelete.kind === "note") deleteNoteMutation.mutate({ id: pendingDelete.id });
+    else if (pendingDelete.kind === "checklist")
+      deleteChecklistMutation.mutate({ projectId, itemId: pendingDelete.id });
+    else if (pendingDelete.kind === "file")
+      deleteFileMutation.mutate({ projectId, fileName: pendingDelete.label });
+    setPendingDelete(null);
+  };
+
   const handleSaveItemEdit = (itemId: number) => {
     if (!editItemText.trim()) {
       toast.error("Item text cannot be empty");
@@ -282,6 +302,12 @@ export default function AdminProjectDetail() {
 
   const assignedSubIds = assignments.map((a) => a.subcontractorId);
   const unassignedSubs = subs.filter((s) => !assignedSubIds.includes(s.id));
+
+  // Completed items sink to the bottom; everything else keeps its order.
+  const sortedChecklistItems = [...checklistItems].sort((a, b) => {
+    if (a.isCompleted !== b.isCompleted) return a.isCompleted ? 1 : -1;
+    return a.order - b.order;
+  });
 
   // Only active extracted items count toward progress.
   const activeChecklistItems = checklistItems.filter((i) => i.isActive);
@@ -584,7 +610,9 @@ export default function AdminProjectDetail() {
                               <p className="text-foreground whitespace-pre-wrap">{note.content}</p>
                             </div>
                             <button
-                              onClick={() => deleteNoteMutation.mutate({ id: note.id })}
+                              onClick={() =>
+                                setPendingDelete({ kind: "note", id: note.id, label: note.content })
+                              }
                               className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0"
                             >
                               <X className="w-3.5 h-3.5" />
@@ -721,7 +749,7 @@ export default function AdminProjectDetail() {
 
                       {/* Checklist Items */}
                       <div className="space-y-1.5 md:space-y-2">
-                        {checklistItems.map((item) => {
+                        {sortedChecklistItems.map((item) => {
                           const inactive = !item.isActive;
                           return (
                           <div
@@ -732,11 +760,85 @@ export default function AdminProjectDetail() {
                                 : item.isCompleted
                                 ? "bg-gray-50 border-gray-200"
                                 : item.isUserAdded
-                                ? "bg-green-50/40 border-green-200"
+                                ? "bg-blue-50/40 border-blue-200"
                                 : "bg-white border-gray-200 hover:border-gray-300"
                             }`}
                           >
-                            <div className="flex items-center gap-2 md:gap-3">
+                            <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
+                            {/* Controls — top-right on mobile, inline on the right on desktop */}
+                            <div className="flex items-center justify-end gap-1 md:gap-2 md:order-last md:ml-auto flex-shrink-0">
+                              {/* Subcontractor Assignment Dropdown — only active items */}
+                              {!inactive && (
+                              <Select
+                                value={item.assignedSubcontractorId?.toString() || "unassigned"}
+                                onValueChange={(value) => {
+                                  const subcontractorId = value !== "unassigned" ? parseInt(value) : null;
+                                  assignChecklistMutation.mutate({
+                                    projectId,
+                                    itemId: item.id,
+                                    subcontractorId,
+                                  });
+                                }}
+                              >
+                                <SelectTrigger className="h-8 w-28 md:w-32 text-xs flex-shrink-0">
+                                  <SelectValue placeholder="Assign to" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="unassigned">Unassigned</SelectItem>
+                                  {subs.map((sub) => (
+                                    <SelectItem key={sub.id} value={sub.id.toString()}>
+                                      {sub.companyName}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              )}
+
+                              {/* Edit / Save / Cancel */}
+                              {editingItemId === item.id ? (
+                                <>
+                                  <button
+                                    onClick={() => handleSaveItemEdit(item.id)}
+                                    className="flex-shrink-0 p-0.5 md:p-1 text-green-600 hover:bg-green-50 rounded-full transition-colors"
+                                    aria-label="Save"
+                                  >
+                                    <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5" />
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingItemId(null)}
+                                    className="flex-shrink-0 p-0.5 md:p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                                    aria-label="Cancel"
+                                  >
+                                    <X className="w-4 h-4 md:w-5 md:h-5" />
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    setEditingItemId(item.id);
+                                    setEditItemText(item.text);
+                                  }}
+                                  className="flex-shrink-0 p-0.5 md:p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                                  aria-label="Edit item"
+                                >
+                                  <Edit2 className="w-4 h-4 md:w-5 md:h-5" />
+                                </button>
+                              )}
+
+                              {/* Delete Icon */}
+                              <button
+                                onClick={() =>
+                                  setPendingDelete({ kind: "checklist", id: item.id, label: item.text })
+                                }
+                                className="flex-shrink-0 p-0.5 md:p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                                aria-label="Delete item"
+                              >
+                                <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
+                              </button>
+                            </div>
+
+                            {/* Tick + text — full width below the controls on mobile, left on desktop */}
+                            <div className="flex items-start gap-2 md:gap-3 md:flex-1 md:min-w-0">
                             {/* Tick Icon — only active items can be completed */}
                             {!inactive && (
                             <button
@@ -778,11 +880,11 @@ export default function AdminProjectDetail() {
                                   onClick={() =>
                                     updateChecklistMutation.mutate({ projectId, itemId: item.id, isActive: true })
                                   }
-                                  className="group flex items-center gap-2 text-left w-full"
+                                  className="group flex items-start gap-2 text-left w-full"
                                   title="Tap to activate this item"
                                 >
                                   <span className="text-xs md:text-sm break-words text-gray-400 group-hover:text-gray-700">
-                                    {item.text}
+                                    {formatChecklistText(item.text)}
                                   </span>
                                   <span className="text-[10px] md:text-xs text-gray-400 italic flex-shrink-0 group-hover:text-gray-600">
                                     tap to activate
@@ -794,87 +896,22 @@ export default function AdminProjectDetail() {
                                     item.isCompleted
                                       ? "line-through text-gray-400"
                                       : item.isUserAdded
-                                      ? "text-green-700 font-medium"
+                                      ? "text-blue-700 font-medium"
                                       : "text-gray-900"
                                   }`}
                                 >
-                                  {item.text}
+                                  {formatChecklistText(item.text)}
                                 </p>
                               )}
                             </div>
-
-                            {/* Subcontractor Assignment Dropdown — only active items */}
-                            {!inactive && (
-                            <Select
-                              value={item.assignedSubcontractorId?.toString() || "unassigned"}
-                              onValueChange={(value) => {
-                                const subcontractorId = value !== "unassigned" ? parseInt(value) : null;
-                                assignChecklistMutation.mutate({
-                                  projectId,
-                                  itemId: item.id,
-                                  subcontractorId,
-                                });
-                              }}
-                            >
-                              <SelectTrigger className="h-8 w-32 text-xs flex-shrink-0">
-                                <SelectValue placeholder="Assign to" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="unassigned">Unassigned</SelectItem>
-                                {assignments.map((assignment) => (
-                                  <SelectItem key={assignment.subcontractorId} value={assignment.subcontractorId.toString()}>
-                                    {assignment.subcontractor?.companyName || "Unknown"}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            )}
-
-                            {/* Edit / Save / Cancel */}
-                            {editingItemId === item.id ? (
-                              <>
-                                <button
-                                  onClick={() => handleSaveItemEdit(item.id)}
-                                  className="flex-shrink-0 p-0.5 md:p-1 text-green-600 hover:bg-green-50 rounded-full transition-colors"
-                                  aria-label="Save"
-                                >
-                                  <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5" />
-                                </button>
-                                <button
-                                  onClick={() => setEditingItemId(null)}
-                                  className="flex-shrink-0 p-0.5 md:p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
-                                  aria-label="Cancel"
-                                >
-                                  <X className="w-4 h-4 md:w-5 md:h-5" />
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                onClick={() => {
-                                  setEditingItemId(item.id);
-                                  setEditItemText(item.text);
-                                }}
-                                className="flex-shrink-0 p-0.5 md:p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
-                                aria-label="Edit item"
-                              >
-                                <Edit2 className="w-4 h-4 md:w-5 md:h-5" />
-                              </button>
-                            )}
-
-                            {/* Delete Icon */}
-                            <button
-                              onClick={() => deleteChecklistMutation.mutate({ projectId, itemId: item.id })}
-                              className="flex-shrink-0 p-0.5 md:p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
-                              aria-label="Delete item"
-                            >
-                              <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
-                            </button>
+                            </div>
                             </div>
                             {/* Progress slider — only active items */}
                             {!inactive && (
                             <div className="mt-3 px-1">
                               <ChecklistProgressSlider
-                                value={item.progress ?? 0}
+                                value={item.isCompleted ? 100 : (item.progress ?? 0)}
+                                disabled={item.isCompleted}
                                 onCommit={(progress) =>
                                   updateChecklistMutation.mutate({ projectId, itemId: item.id, progress })
                                 }
@@ -905,10 +942,10 @@ export default function AdminProjectDetail() {
                       <Label htmlFor="co-number">Order Number</Label>
                       <Input
                         id="co-number"
-                        placeholder="e.g. CO-001"
-                        value={coForm.orderNumber}
-                        onChange={(e) => setCoForm((f) => ({ ...f, orderNumber: e.target.value }))}
-                        disabled={createChangeOrderItemMutation.isPending}
+                        value={nextCoOrderNumber}
+                        readOnly
+                        title="Auto-generated order number"
+                        className="bg-muted/50 font-medium text-muted-foreground"
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -1045,7 +1082,9 @@ export default function AdminProjectDetail() {
                               <Download className="w-4 h-4" />
                             </a>
                             <button
-                              onClick={() => deleteFileMutation.mutate({ id: file.id })}
+                              onClick={() =>
+                                setPendingDelete({ kind: "file", id: file.id, label: file.fileName })
+                              }
                               className="p-1.5 rounded hover:bg-background transition-colors text-muted-foreground hover:text-destructive"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -1191,6 +1230,20 @@ export default function AdminProjectDetail() {
       </div>
 
       <DeleteConfirmDialog />
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(o) => { if (!o) setPendingDelete(null); }}
+        title={
+          pendingDelete?.kind === "note"
+            ? "Delete Note"
+            : pendingDelete?.kind === "file"
+            ? "Delete File"
+            : "Delete Checklist Item"
+        }
+        description="Are you sure you want to delete this? This action cannot be undone."
+        itemLabel={pendingDelete?.label}
+        onConfirm={handleConfirmDelete}
+      />
     </CRMLayout>
   );
 }

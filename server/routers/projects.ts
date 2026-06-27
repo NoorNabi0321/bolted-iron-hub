@@ -135,7 +135,7 @@ export const projectsRouter = router({
       const totalCount = extracted.length;
       const completedCount = extracted.filter((i) => i.isCompleted).length;
       const completionPercentage = totalCount
-        ? Math.round(extracted.reduce((s, i) => s + (i.progress ?? 0), 0) / totalCount)
+        ? Math.round(extracted.reduce((s, i) => s + (i.isCompleted ? 100 : (i.progress ?? 0)), 0) / totalCount)
         : 0;
       const actionCount = activity.filter((a) => a.projectId === pid).length;
       result.push({
@@ -180,7 +180,7 @@ export const projectsRouter = router({
         const totalCount = extracted.length;
         const completedCount = extracted.filter((i) => i.isCompleted).length;
         const completionPercentage = totalCount
-          ? Math.round(extracted.reduce((s, i) => s + (i.progress ?? 0), 0) / totalCount)
+          ? Math.round(extracted.reduce((s, i) => s + (i.isCompleted ? 100 : (i.progress ?? 0)), 0) / totalCount)
           : 0;
         projectsData.push({
           id: project.id,
@@ -191,7 +191,7 @@ export const projectsRouter = router({
           totalCount,
           items: extracted.map((i) => ({
             text: i.text,
-            progress: i.progress ?? 0,
+            progress: i.isCompleted ? 100 : (i.progress ?? 0),
             isCompleted: i.isCompleted,
           })),
           activities: acts.map((a) => ({

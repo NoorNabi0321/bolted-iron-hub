@@ -63,10 +63,11 @@ export const changeOrdersRouter = router({
       if (order && order.status !== "approved") {
         const items = await getChecklistItemsForProject(order.projectId);
         const maxOrder = items.reduce((m, i) => Math.max(m, i.order), 0);
-        const inches = Number(order.amount ?? 0).toFixed(2);
+        // Length in inches, trimmed of trailing zeros, shown with the inch mark (").
+        const inches = parseFloat(Number(order.amount ?? 0).toFixed(2)).toString();
         await createChecklistItem({
           projectId: order.projectId,
-          text: `${order.description} — ${inches} in`,
+          text: `${order.description} — ${inches}"`,
           isCompleted: false,
           progress: 0,
           order: maxOrder + 1,

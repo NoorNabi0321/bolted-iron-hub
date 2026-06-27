@@ -3,14 +3,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, formatCoNumber, nextCoNumber } from "@/lib/utils";
 import { Check, Plus, Trash2, X } from "lucide-react";
 import { usePersistedState } from "@/hooks/usePersistedState";
+import { useState } from "react";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { toast } from "sonner";
 
 export function ProjectChangeOrders({ projectId }: { projectId: number }) {
   const [showForm, setShowForm] = usePersistedState(`bih:proj:${projectId}:co:showForm`, false);
-  const [orderNumber, setOrderNumber] = usePersistedState(`bih:proj:${projectId}:co:orderNumber`, "");
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const [description, setDescription] = usePersistedState(`bih:proj:${projectId}:co:description`, "");
   const [amount, setAmount] = usePersistedState(`bih:proj:${projectId}:co:amount`, "");
   const [notes, setNotes] = usePersistedState(`bih:proj:${projectId}:co:notes`, "");
@@ -18,10 +20,12 @@ export function ProjectChangeOrders({ projectId }: { projectId: number }) {
   const utils = trpc.useUtils();
   const { data: orders = [] } = trpc.changeOrders.list.useQuery({ projectId });
 
+  // Auto-generated per project: CO-001, CO-002, ...
+  const nextOrderNumber = nextCoNumber(orders.map((o) => o.orderNumber));
+
   const createMutation = trpc.changeOrders.create.useMutation({
     onSuccess: () => {
       utils.changeOrders.list.invalidate({ projectId });
-      setOrderNumber("");
       setDescription("");
       setAmount("");
       setNotes("");
@@ -79,10 +83,10 @@ export function ProjectChangeOrders({ projectId }: { projectId: number }) {
         <div className="p-3 rounded-lg bg-muted/30 border border-border space-y-2">
           <div className="grid grid-cols-2 gap-2">
             <Input
-              placeholder="Order #"
-              value={orderNumber}
-              onChange={(e) => setOrderNumber(e.target.value)}
-              className="bg-card border-border text-sm"
+              value={nextOrderNumber}
+              readOnly
+              title="Auto-generated order number"
+              className="bg-muted/50 border-border text-sm font-medium text-muted-foreground"
             />
             <Input
               placeholder="Length (Inches)"
@@ -115,13 +119,13 @@ export function ProjectChangeOrders({ projectId }: { projectId: number }) {
               onClick={() =>
                 createMutation.mutate({
                   projectId,
-                  orderNumber,
+                  orderNumber: nextOrderNumber,
                   description,
                   amount,
                   notes: notes || undefined,
                 })
               }
-              disabled={!orderNumber.trim() || !description.trim() || !amount.trim() || createMutation.isPending}
+              disabled={!description.trim() || !amount.trim() || createMutation.isPending}
             >
               Create
             </Button>
@@ -139,7 +143,7 @@ export function ProjectChangeOrders({ projectId }: { projectId: number }) {
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-semibold text-foreground">CO-{order.orderNumber}</span>
+                    <span className="text-sm font-semibold text-foreground">{formatCoNumber(order.orderNumber)}</span>
                     <Badge
                       variant={
                         order.status === "approved"
@@ -180,7 +184,7 @@ export function ProjectChangeOrders({ projectId }: { projectId: number }) {
                 )}
 
                 <button
-                  onClick={() => deleteMutation.mutate({ id: order.id })}
+                  onClick={() => setPendingDeleteId(order.id)}
                   className="p-1.5 rounded hover:bg-accent text-muted-foreground hover:text-destructive transition-colors flex-shrink-0"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -190,6 +194,21 @@ export function ProjectChangeOrders({ projectId }: { projectId: number }) {
           ))
         )}
       </div>
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(o) => { if (!o) setPendingDeleteId(null); }}
+        title="Delete Change Order"
+        description="Are you sure you want to delete this change order? This action cannot be undone."
+        itemLabel={(() => {
+          const o = orders.find((x) => x.id === pendingDeleteId);
+          return o ? `${formatCoNumber(o.orderNumber)} — ${o.description}` : undefined;
+        })()}
+        onConfirm={() => {
+          if (pendingDeleteId !== null) deleteMutation.mutate({ id: pendingDeleteId });
+          setPendingDeleteId(null);
+        }}
+      />
     </div>
   );
 }

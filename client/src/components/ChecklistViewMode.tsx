@@ -14,6 +14,7 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
 import { ChecklistProgressSlider } from "@/components/ChecklistProgressSlider";
+import { formatChecklistText } from "@/lib/utils";
 
 interface ChecklistItem {
   id: number;
@@ -251,7 +252,7 @@ export function ChecklistViewMode({
                         : "text-gray-900"
                     }`}
                   >
-                    {item.text}
+                    {formatChecklistText(item.text)}
                   </p>
                 </div>
 
@@ -282,7 +283,8 @@ export function ChecklistViewMode({
                 {showProgress && (
                   <div className="mt-3 px-1">
                     <ChecklistProgressSlider
-                      value={item.progress ?? 0}
+                      value={item.isCompleted ? 100 : (item.progress ?? 0)}
+                      disabled={item.isCompleted}
                       onCommit={(progress) =>
                         updateItemMutation.mutate({ projectId, itemId: item.id, progress })
                       }

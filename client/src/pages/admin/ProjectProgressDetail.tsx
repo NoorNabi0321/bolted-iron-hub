@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ReportViewer } from "@/components/ReportViewer";
 import { ArrowLeft, FileText, Loader2, CheckCircle2, Circle } from "lucide-react";
+import { formatChecklistText } from "@/lib/utils";
 import { toast } from "sonner";
 
 export default function ProjectProgressDetail() {
@@ -24,7 +25,7 @@ export default function ProjectProgressDetail() {
   const totalCount = items.length;
   const completedCount = items.filter((i) => i.isCompleted).length;
   const completionPercentage = totalCount
-    ? Math.round(items.reduce((s, i) => s + (i.progress ?? 0), 0) / totalCount)
+    ? Math.round(items.reduce((s, i) => s + (i.isCompleted ? 100 : (i.progress ?? 0)), 0) / totalCount)
     : 0;
 
   const handleGenerate = async () => {
@@ -94,14 +95,14 @@ export default function ProjectProgressDetail() {
                     <Circle className="w-4 h-4 text-gray-400 flex-shrink-0" />
                   )}
                   <span className={`flex-1 min-w-0 text-sm break-words ${item.isCompleted ? "line-through text-gray-400" : "text-foreground"}`}>
-                    {item.text}
+                    {formatChecklistText(item.text)}
                   </span>
                   <div className="flex items-center gap-2 w-36 flex-shrink-0">
                     <div className="flex-1 bg-secondary rounded-full h-1.5 overflow-hidden">
-                      <div className="bg-green-500 h-full" style={{ width: `${item.progress ?? 0}%` }} />
+                      <div className="bg-green-500 h-full" style={{ width: `${item.isCompleted ? 100 : (item.progress ?? 0)}%` }} />
                     </div>
                     <span className="text-xs font-medium tabular-nums w-9 text-right text-muted-foreground">
-                      {item.progress ?? 0}%
+                      {item.isCompleted ? 100 : (item.progress ?? 0)}%
                     </span>
                   </div>
                 </div>

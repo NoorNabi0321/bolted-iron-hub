@@ -86,6 +86,33 @@ export function timestampToDateInput(timestamp: number | null | undefined): stri
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * Display a checklist item's text with change-order lengths shown as inches.
+ * Reformats a trailing `— 120.00 in` (the stored change-order format) to
+ * `— 120"`, trimming decimals. Anchored on the em-dash so normal wording
+ * like "2 in pipe" is left alone.
+ */
+export function formatChecklistText(text: string): string {
+  return text.replace(/—\s*(\d+(?:\.\d+)?)\s+in\b\.?/gi, (_m, n) => `— ${parseFloat(n)}"`);
+}
+
+/** Ensure a change-order number is displayed with the `CO-` prefix. */
+export function formatCoNumber(orderNumber: string): string {
+  return /^co-/i.test(orderNumber) ? orderNumber : `CO-${orderNumber}`;
+}
+
+/**
+ * Next change-order number for a project, e.g. `CO-001`, `CO-002`.
+ * Parses the numeric part of existing order numbers and increments the max.
+ */
+export function nextCoNumber(existing: string[]): string {
+  const max = existing.reduce((m, on) => {
+    const n = parseInt(String(on).replace(/\D/g, ""), 10);
+    return Number.isFinite(n) ? Math.max(m, n) : m;
+  }, 0);
+  return `CO-${String(max + 1).padStart(3, "0")}`;
+}
+
 export function formatFileSize(bytes: number | null | undefined): string {
   if (!bytes) return "";
   if (bytes < 1024) return `${bytes} B`;
