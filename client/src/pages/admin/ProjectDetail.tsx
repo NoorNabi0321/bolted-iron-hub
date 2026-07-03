@@ -892,7 +892,16 @@ export default function AdminProjectDetail() {
                                 </button>
                               ) : (
                                 <p
+                                  onDoubleClick={() => {
+                                    // Proposal-extracted items toggle back to inactive on double-click.
+                                    if (!item.isUserAdded) {
+                                      updateChecklistMutation.mutate({ projectId, itemId: item.id, isActive: false });
+                                    }
+                                  }}
+                                  title={item.isUserAdded ? undefined : "Double-click to deactivate"}
                                   className={`text-xs md:text-sm break-words ${
+                                    item.isUserAdded ? "" : "cursor-pointer select-none"
+                                  } ${
                                     item.isCompleted
                                       ? "line-through text-gray-400"
                                       : item.isUserAdded
