@@ -1,4 +1,4 @@
-import { getLoginUrl } from "@/const";
+import { getLoginUrl, isOAuthConfigured } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -250,26 +250,30 @@ export default function LoginPage() {
             </button>
           </div>
 
-          {/* Divider */}
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white px-2 text-muted-foreground">Or</span>
-            </div>
-          </div>
+          {/* Manus OAuth — only shown when configured (not on self-hosted) */}
+          {isOAuthConfigured && (
+            <>
+              {/* Divider */}
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-white px-2 text-muted-foreground">Or</span>
+                </div>
+              </div>
 
-          {/* Manus OAuth option */}
-          <a href={getLoginUrl()} className="block">
-            <Button
-              variant="outline"
-              className="w-full h-11 text-sm font-medium"
-              size="lg"
-            >
-              Sign in with Manus Account
-            </Button>
-          </a>
+              <a href={getLoginUrl()} className="block">
+                <Button
+                  variant="outline"
+                  className="w-full h-11 text-sm font-medium"
+                  size="lg"
+                >
+                  Sign in with Manus Account
+                </Button>
+              </a>
+            </>
+          )}
 
           {mode === "register" && (
             <p className="text-center text-xs text-muted-foreground">
