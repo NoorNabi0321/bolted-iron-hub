@@ -9,4 +9,11 @@ export const ENV = {
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
   gmailEmail: process.env.GMAIL_EMAIL ?? "",
   gmailAppPassword: process.env.GMAIL_APP_PASSWORD ?? "",
+  // Cloudflare R2 (S3-compatible) object storage.
+  r2Endpoint: process.env.R2_ENDPOINT ?? "",
+  r2AccessKeyId: process.env.R2_ACCESS_KEY_ID ?? "",
+  r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? "",
+  r2Bucket: process.env.R2_BUCKET ?? "",
+  /** Public base URL for the bucket, e.g. https://pub-xxxx.r2.dev or a custom domain. */
+  r2PublicBase: process.env.R2_PUBLIC_BASE ?? "",
 };
