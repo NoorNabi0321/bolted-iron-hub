@@ -5,6 +5,9 @@
  */
 
 import { PDFParse } from "pdf-parse";
+import { createOpenAI } from "@ai-sdk/openai";
+import { generateObject } from "ai";
+import { z } from "zod";
 
 interface ExtractedItem {
   text: string;
@@ -212,6 +215,61 @@ function filterValidItems(items: string[]): ExtractedItem[] {
 }
 
 /**
+ * Build an OpenAI client from env. Returns null when no key is configured
+ * (so extraction falls back to the heuristic parser). Works with a real
+ * OpenAI key (default endpoint) or any OpenAI-compatible base URL.
+ */
+function getOpenAIClient() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+  const baseURL = process.env.OPENAI_BASE_URL || process.env.OPENAI_API_BASE || undefined;
+  return createOpenAI({ apiKey, baseURL });
+}
+
+/**
+ * Use an LLM to read the proposal text and return ONLY the Description-column
+ * work items, joining descriptions that wrap across multiple lines. Returns
+ * null on any failure so the caller can fall back to the heuristic parser.
+ */
+async function extractItemsWithAI(fullText: string): Promise<string[] | null> {
+  const openai = getOpenAIClient();
+  if (!openai || !fullText.trim()) return null;
+
+  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+  try {
+    const { object } = await generateObject({
+      model: openai.chat(model),
+      temperature: 0,
+      schema: z.object({
+        items: z
+          .array(z.string())
+          .describe("Work-item descriptions from the Description column, in order"),
+      }),
+      prompt: `You are extracting a work-item checklist from a structural-steel construction proposal PDF.
+The proposal has a table with columns: Description, Qty, Rate, Total. The text below was extracted from the PDF, so column alignment may be lost.
+
+Return ONLY the values from the "Description" column — the names of the work items — as an ordered array of strings. Rules (follow strictly):
+1. Description text ONLY. NEVER include quantities, rates, unit prices, dollar amounts or totals (e.g. "183", "38.00", "6,954.00", "-3,058.00").
+2. If one item's description wraps across multiple lines, JOIN it into a SINGLE item. Example: "Cut 8" Openings On Existing Beams And" + "Reinforce With Stiffener Plates" becomes ONE item: "Cut 8" Openings On Existing Beams And Reinforce With Stiffener Plates".
+3. Exclude the column header row ("Description", "Qty", "Rate", "Total", "Amount").
+4. Exclude section titles such as "Fabrication And Installation" and "Scope Of Work".
+5. Exclude summary/adjustment rows: "Discount", "Subtotal", "Tax", "Total", and any pricing notes, terms, addresses, phone numbers or contact lines.
+6. Keep each description exactly as written — do not paraphrase, summarize, or add words.
+7. Preserve the original top-to-bottom order. Location/group labels that appear as their own rows (e.g. "Staircase A") may be kept as separate items.
+
+PDF TEXT:
+"""
+${fullText}
+"""`,
+    });
+    return object.items.map((s) => s.trim()).filter((s) => s.length > 0);
+  } catch (error) {
+    console.error("[Proposal Extractor] AI extraction failed, falling back to heuristic:", error);
+    return null;
+  }
+}
+
+/**
  * Main extraction function
  * Takes a PDF buffer and extracts checklist items
  */
@@ -222,7 +280,17 @@ export async function extractChecklistFromPDF(
     // Step 1: Extract text from PDF
     const fullText = await extractTextFromPDF(pdfBuffer);
 
-    // Step 2: Find and extract the relevant section
+    // Step 2 (primary): AI extraction — Description column only, multi-line aware.
+    const aiItems = await extractItemsWithAI(fullText);
+    if (aiItems && aiItems.length > 0) {
+      return {
+        success: true,
+        items: aiItems.map((text, i) => ({ text, order: i })),
+        itemCount: aiItems.length,
+      };
+    }
+
+    // Step 2 (fallback): heuristic line parser when AI isn't configured/fails.
     const { items: rawItems, sectionType } = findAndExtractSection(fullText);
 
     if (!sectionType || rawItems.length === 0) {
