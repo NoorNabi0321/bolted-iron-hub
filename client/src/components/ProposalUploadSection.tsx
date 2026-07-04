@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Upload, AlertCircle, CheckCircle2, Loader2, FileText, ExternalLink, Trash2 } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Upload, CheckCircle2, Loader2, ExternalLink, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -17,14 +17,18 @@ import { toast } from "sonner";
 interface ProposalUploadSectionProps {
   projectId: number;
   proposalId?: number | null;
+  proposalFileName?: string | null;
   proposalFileUrl?: string | null;
   extractedItemsCount?: number;
   onProposalUploaded?: () => void;
 }
 
+type UploadMode = "replace" | "append";
+
 export function ProposalUploadSection({
   projectId,
   proposalId,
+  proposalFileName,
   proposalFileUrl,
   extractedItemsCount = 0,
   onProposalUploaded,
@@ -33,20 +37,28 @@ export function ProposalUploadSection({
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [pendingMode, setPendingMode] = useState<UploadMode>("replace");
   
   // Local state for immediate UI update - synced with props
   const [localProposalFileUrl, setLocalProposalFileUrl] = useState<string | null>(proposalFileUrl || null);
+  const [localProposalFileName, setLocalProposalFileName] = useState<string | null>(proposalFileName || null);
   const [localExtractedItemsCount, setLocalExtractedItemsCount] = useState(extractedItemsCount);
   const [localProposalId, setLocalProposalId] = useState<number | null>(proposalId || null);
 
+  const { data: proposal } = trpc.projects.getProposal.useQuery({ projectId });
+  const { data: extractedItems = [] } = trpc.projects.getChecklistItems.useQuery({
+    projectId,
+    source: "extracted",
+  });
+
   // Sync local state with props when they change (from parent refresh)
   useEffect(() => {
-    setLocalProposalFileUrl(proposalFileUrl || null);
-    setLocalExtractedItemsCount(extractedItemsCount);
-    setLocalProposalId(proposalId || null);
-  }, [proposalFileUrl, extractedItemsCount, proposalId]);
+    setLocalProposalFileUrl(proposal?.fileUrl || proposalFileUrl || null);
+    setLocalProposalFileName(proposal?.fileName || proposalFileName || null);
+    setLocalExtractedItemsCount(proposal?.extractedItemsCount ?? extractedItemsCount);
+    setLocalProposalId(proposal?.id || proposalId || null);
+  }, [proposal, proposalFileUrl, proposalFileName, extractedItemsCount, proposalId]);
 
   const utils = trpc.useUtils();
   
@@ -55,32 +67,23 @@ export function ProposalUploadSection({
       setIsUploading(false);
       // Update local state immediately for instant UI feedback
       setLocalProposalFileUrl(data.fileUrl);
+      setLocalProposalFileName(data.fileName);
       setLocalExtractedItemsCount(data.extractedItemsCount || 0);
       setLocalProposalId(data.proposalId);
-      toast.success("Proposal uploaded and checklist extracted successfully");
+      toast.success(
+        data.mode === "append"
+          ? `Added ${data.extractedItemsCount || 0} checklist items`
+          : `Replaced checklist with ${data.extractedItemsCount || 0} extracted items`
+      );
       // Invalidate the extracted checklist items query to refetch from server
       utils.projects.getChecklistItems.invalidate({ projectId, source: "extracted" });
+      utils.projects.getProposal.invalidate({ projectId });
       // Refresh parent data in background (no delay needed, just call it)
       onProposalUploaded?.();
     },
     onError: (error) => {
       setIsUploading(false);
       toast.error(error.message || "Failed to upload proposal");
-    },
-  });
-
-  const deleteProposalMutation = trpc.projects.deleteProposal.useMutation({
-    onSuccess: () => {
-      // Update local state immediately
-      setLocalProposalFileUrl(null);
-      setLocalExtractedItemsCount(0);
-      setLocalProposalId(null);
-      toast.success("Proposal and checklist cleared successfully");
-      // Refresh parent data in background
-      onProposalUploaded?.();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to clear proposal");
     },
   });
 
@@ -91,20 +94,21 @@ export function ProposalUploadSection({
       return;
     }
 
-    // If proposal already exists, show confirmation dialog
-    if (localProposalFileUrl) {
+    // Replacing an existing extracted checklist is destructive, so confirm it.
+    if (localProposalFileUrl && pendingMode === "replace") {
       setPendingFile(file);
       setShowReplaceConfirm(true);
       return;
     }
 
     // Upload the file
-    await uploadFile(file);
+    await uploadFile(file, pendingMode);
   };
 
-  const uploadFile = async (file: File) => {
+  const uploadFile = async (file: File, mode: UploadMode) => {
     setIsUploading(true);
     setPendingFile(null);
+    setShowReplaceConfirm(false);
 
     try {
       const fileBuffer = await file.arrayBuffer();
@@ -120,6 +124,7 @@ export function ProposalUploadSection({
         projectId,
         fileName: file.name,
         fileBase64: base64String,
+        mode,
       });
     } catch (error) {
       setIsUploading(false);
@@ -147,7 +152,8 @@ export function ProposalUploadSection({
     }
   };
 
-  const handleClick = () => {
+  const handleClick = (mode: UploadMode = "replace") => {
+    setPendingMode(mode);
     fileInputRef.current?.click();
   };
 
@@ -156,6 +162,7 @@ export function ProposalUploadSection({
     if (files && files.length > 0) {
       handleFileSelect(files[0]);
     }
+    e.currentTarget.value = "";
   };
 
   const handleOpenPDF = () => {
@@ -165,19 +172,7 @@ export function ProposalUploadSection({
     }
   };
 
-  const handleClearChecklist = () => {
-    setShowClearConfirm(true);
-  };
-
-  const confirmClearChecklist = () => {
-    setShowClearConfirm(false);
-    // Use local state, not prop
-    if (localProposalId) {
-      deleteProposalMutation.mutate({ proposalId: localProposalId });
-    } else {
-      toast.error("Proposal ID not found");
-    }
-  };
+  const totalExtractedItems = extractedItems.length;
 
   return (
     <>
@@ -195,8 +190,13 @@ export function ProposalUploadSection({
                   <CheckCircle2 className="w-5 h-5 text-green-600" />
                   <div>
                     <p className="text-sm font-medium text-green-900">Proposal Uploaded</p>
+                    <p className="text-xs font-medium text-green-800">
+                      {localProposalFileName || "Uploaded proposal PDF"}
+                    </p>
                     <p className="text-xs text-green-700">
-                      {localExtractedItemsCount} checklist items extracted
+                      {localExtractedItemsCount} checklist items extracted from latest PDF
+                      {totalExtractedItems !== localExtractedItemsCount &&
+                        ` (${totalExtractedItems} total extracted items)`}
                     </p>
                   </div>
                 </div>
@@ -214,7 +214,7 @@ export function ProposalUploadSection({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={handleClick}
+                  onClick={() => handleClick("replace")}
                   disabled={isUploading}
                 >
                   {isUploading ? (
@@ -225,26 +225,25 @@ export function ProposalUploadSection({
                   ) : (
                     <>
                       <Upload className="w-4 h-4 mr-2" />
-                      Replace Proposal
+                      Replace Checklist Items
                     </>
                   )}
                 </Button>
                 <Button
-                  variant="destructive"
+                  variant="outline"
                   size="sm"
-                  onClick={handleClearChecklist}
-                  className="bg-red-600 hover:bg-red-700"
-                  disabled={deleteProposalMutation.isPending}
+                  onClick={() => handleClick("append")}
+                  disabled={isUploading}
                 >
-                  {deleteProposalMutation.isPending ? (
+                  {isUploading && pendingMode === "append" ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Clearing...
+                      Uploading...
                     </>
                   ) : (
                     <>
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      Clear Checklist
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add New Checklist Items
                     </>
                   )}
                 </Button>
@@ -255,7 +254,7 @@ export function ProposalUploadSection({
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              onClick={handleClick}
+              onClick={() => handleClick("replace")}
               className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
                 isDragging
                   ? "border-blue-500 bg-blue-50"
@@ -284,10 +283,10 @@ export function ProposalUploadSection({
       <AlertDialog open={showReplaceConfirm} onOpenChange={setShowReplaceConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Replace Proposal?</AlertDialogTitle>
+            <AlertDialogTitle>Replace extracted checklist?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will delete the existing proposal and all associated checklist items, then
-              extract new items from the new proposal. This action cannot be undone.
+              This will remove the current extracted checklist items and build a new extracted
+              checklist from the selected proposal PDF. This does not affect the manual checklist.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="flex gap-3 justify-end">
@@ -295,7 +294,7 @@ export function ProposalUploadSection({
             <AlertDialogAction
               onClick={() => {
                 if (pendingFile) {
-                  uploadFile(pendingFile);
+                  uploadFile(pendingFile, "replace");
                 }
               }}
               className="bg-red-600 hover:bg-red-700"
@@ -306,26 +305,6 @@ export function ProposalUploadSection({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Clear Checklist Confirmation Dialog */}
-      <AlertDialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Clear Proposal Checklist?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Do you really want to clear the proposal checklist? This will remove the PDF and all associated checklist items. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex gap-3 justify-end">
-            <AlertDialogCancel>No</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmClearChecklist}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              Yes
-            </AlertDialogAction>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 }

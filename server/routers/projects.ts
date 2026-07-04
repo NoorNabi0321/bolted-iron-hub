@@ -422,10 +422,16 @@ export const projectsRouter = router({
         projectId: z.number(),
         fileName: z.string(),
         fileUrl: z.string(),
+        extractedItemsCount: z.number().optional(),
       })
     )
     .mutation(async ({ input }) => {
-      return createProposal(input.projectId, input.fileName, input.fileUrl);
+      return createProposal({
+        projectId: input.projectId,
+        fileName: input.fileName,
+        fileUrl: input.fileUrl,
+        extractedItemsCount: input.extractedItemsCount ?? 0,
+      });
     }),
 
   // Admin: get proposal for project
@@ -449,9 +455,10 @@ export const projectsRouter = router({
 
   // Admin: delete proposal
   deleteProposal: adminProcedure
-    .input(z.number())
+    .input(z.union([z.number(), z.object({ proposalId: z.number() })]))
     .mutation(async ({ input }) => {
-      return deleteProposal(input);
+      const proposalId = typeof input === "number" ? input : input.proposalId;
+      return deleteProposal(proposalId);
     }),
 
   // Admin: create checklist item
@@ -1016,6 +1023,7 @@ export const projectsRouter = router({
         projectId: z.number(),
         fileName: z.string(),
         fileBase64: z.string(), // Base64 encoded PDF
+        mode: z.enum(["replace", "append"]).optional().default("replace"),
       })
     )
     .mutation(async ({ input }) => {
@@ -1029,10 +1037,34 @@ export const projectsRouter = router({
         if (!extractionResult.success) {
           throw new Error(extractionResult.error || "Failed to extract items from PDF");
         }
-        
-        // Delete all existing extracted checklist items for this project
-        // This ensures new PDF upload replaces old items instead of appending
-        await deleteAllChecklistItemsForProject(input.projectId, "extracted");
+
+        const isAppend = input.mode === "append";
+
+        if (!isAppend) {
+          // Replace mode: new PDF replaces all existing extracted checklist items.
+          await deleteAllChecklistItemsForProject(input.projectId, "extracted");
+        }
+
+        const existingItems = isAppend
+          ? (await getChecklistItemsForProject(input.projectId)).filter((item) => item.source === "extracted")
+          : [];
+        const startOrder =
+          existingItems.length > 0
+            ? Math.max(...existingItems.map((item) => item.order)) + 1
+            : 0;
+
+        const { url } = await storagePut(
+          `projects/${input.projectId}/proposals/${Date.now()}-${input.fileName}`,
+          pdfBuffer,
+          "application/pdf"
+        );
+
+        const proposalId = await createProposal({
+          projectId: input.projectId,
+          fileName: input.fileName,
+          fileUrl: url,
+          extractedItemsCount: extractionResult.items.length,
+        });
         
         // Save checklist items to database
         const savedItems = [];
@@ -1042,7 +1074,7 @@ export const projectsRouter = router({
             projectId: input.projectId,
             text: item.text,
             isCompleted: false,
-            order: index,
+            order: startOrder + index,
             source: "extracted",
             isActive: false,
             isUserAdded: false,
@@ -1052,8 +1084,15 @@ export const projectsRouter = router({
         
         return {
           success: true,
-          itemsExtracted: extractionResult.items.length,
+          proposalId,
           fileName: input.fileName,
+          fileUrl: url,
+          extractedItemsCount: extractionResult.items.length,
+          itemsExtracted: extractionResult.items.length,
+          mode: input.mode,
+          totalExtractedItems: isAppend
+            ? existingItems.length + extractionResult.items.length
+            : extractionResult.items.length,
         };
       } catch (error) {
         console.error("[uploadProposalAndExtract] Error:", error);

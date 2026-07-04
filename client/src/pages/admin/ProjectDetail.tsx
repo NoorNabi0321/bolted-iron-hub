@@ -1024,10 +1024,9 @@ export default function AdminProjectDetail() {
               {/* Section 3: Proposal Upload & Auto-Checklist */}
               <ProposalUploadSection
                 projectId={projectId}
-                proposalId={project?.proposalId}
-                proposalFileUrl={project?.proposalFileUrl}
-                extractedItemsCount={project?.extractedItemsCount}
-                onProposalUploaded={() => utils.projects.get.invalidate({ id: projectId })}
+                onProposalUploaded={() => {
+                  utils.projects.getChecklistItems.invalidate({ projectId, source: "extracted" });
+                }}
               />
 
               {/* Section 4: Files & Attachments */}
