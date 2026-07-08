@@ -4,7 +4,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
-import { formatDate, PROJECT_STATUSES } from "@/lib/utils";
+import { formatDate, PROJECT_STATUSES, sortProjectsForList } from "@/lib/utils";
 import {
   AlertCircle,
   Building2,
@@ -123,7 +123,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Weekly Schedule - MOVED TO TOP */}
-        <DailySchedule projects={projects} subcontractors={subs} />
+        <DailySchedule projects={sortProjectsForList(projects)} subcontractors={subs} />
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">

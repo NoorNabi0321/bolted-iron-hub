@@ -341,6 +341,13 @@ export async function deleteProject(id: number): Promise<void> {
   await db.delete(projects).where(eq(projects.id, id));
 }
 
+/** Bump a project's updatedAt so activity (checklist, change orders, etc.) floats it to the top of lists. */
+export async function touchProject(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(projects).set({ updatedAt: new Date() }).where(eq(projects.id, id));
+}
+
 // ─── Project Assignments ──────────────────────────────────────────────────────
 export async function getAssignmentsForProject(projectId: number): Promise<ProjectAssignment[]> {
   const db = await getDb();

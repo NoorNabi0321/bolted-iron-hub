@@ -7,6 +7,7 @@ import {
   getChangeOrderById,
   getChangeOrdersForProject,
   getChecklistItemsForProject,
+  touchProject,
   updateChangeOrder,
 } from "../db";
 import { protectedProcedure, router } from "../_core/trpc";
@@ -45,6 +46,7 @@ export const changeOrdersRouter = router({
         notes: input.notes,
         isChecklistItem: input.isChecklistItem ?? false,
       });
+      await touchProject(input.projectId);
       return { id };
     }),
 
@@ -76,6 +78,7 @@ export const changeOrdersRouter = router({
           isUserAdded: true,
         });
       }
+      if (order) await touchProject(order.projectId);
       return { success: true };
     }),
 

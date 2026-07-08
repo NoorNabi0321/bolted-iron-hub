@@ -29,6 +29,7 @@ import {
   assignChecklistItem,
   reorderChecklistItems,
   deleteAllChecklistItemsForProject,
+  touchProject,
   updateProjectAssignment,
   deleteAssignmentById,
   createNote,
@@ -477,7 +478,7 @@ export const projectsRouter = router({
       })
     )
     .mutation(async ({ input }) => {
-      return createChecklistItem({
+      const id = await createChecklistItem({
         projectId: input.projectId,
         text: input.text || input.title || "",
         isCompleted: input.isCompleted ?? false,
@@ -486,6 +487,8 @@ export const projectsRouter = router({
         isActive: input.isActive ?? true,
         isUserAdded: input.isUserAdded ?? false,
       });
+      await touchProject(input.projectId);
+      return id;
     }),
 
   // Admin: get checklist items for project
@@ -582,6 +585,7 @@ export const projectsRouter = router({
         }
       }
 
+      await touchProject(projectId);
       return { success: true };
     }),
 
@@ -589,7 +593,9 @@ export const projectsRouter = router({
   deleteChecklistItem: adminProcedure
     .input(z.object({ projectId: z.number(), itemId: z.number() }))
     .mutation(async ({ input }) => {
-      return deleteChecklistItem(input.itemId);
+      await deleteChecklistItem(input.itemId);
+      await touchProject(input.projectId);
+      return { success: true };
     }),
 
   // Admin: assign checklist item to subcontractor
@@ -602,7 +608,9 @@ export const projectsRouter = router({
       })
     )
     .mutation(async ({ input }) => {
-      return assignChecklistItem(input.itemId, input.subcontractorId);
+      await assignChecklistItem(input.itemId, input.subcontractorId);
+      await touchProject(input.projectId);
+      return { success: true };
     }),
 
   // Admin: reorder checklist items
@@ -708,6 +716,7 @@ export const projectsRouter = router({
         billingStatus: input.billingStatus,
         notes: input.notes,
       });
+      await touchProject(input.projectId);
       return { success: true };
     }),
 
@@ -1081,7 +1090,9 @@ export const projectsRouter = router({
           });
           savedItems.push(id);
         }
-        
+
+        await touchProject(input.projectId);
+
         return {
           success: true,
           proposalId,

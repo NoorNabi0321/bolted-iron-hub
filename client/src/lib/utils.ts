@@ -113,6 +113,21 @@ export function nextCoNumber(existing: string[]): string {
   return `CO-${String(max + 1).padStart(3, "0")}`;
 }
 
+/**
+ * Order projects for list/schedule display: urgent projects pinned on top,
+ * then most-recently-modified first (any edit bumps updatedAt).
+ */
+export function sortProjectsForList<
+  T extends { isUrgent?: boolean | null; updatedAt: Date | string }
+>(projects: T[]): T[] {
+  return [...projects].sort((a, b) => {
+    const au = a.isUrgent ? 1 : 0;
+    const bu = b.isUrgent ? 1 : 0;
+    if (au !== bu) return bu - au; // urgent first
+    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(); // newest first
+  });
+}
+
 export function formatFileSize(bytes: number | null | undefined): string {
   if (!bytes) return "";
   if (bytes < 1024) return `${bytes} B`;

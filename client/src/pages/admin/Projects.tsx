@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
-import { formatDate, formatTime, PROJECT_STATUSES } from "@/lib/utils";
+import { formatDate, formatTime, PROJECT_STATUSES, sortProjectsForList } from "@/lib/utils";
 import { Calendar, FolderOpen, List, Plus, Search, X, Trash2, FileDown, Mail, MessageCircle, Star } from "lucide-react";
 import { useState, useEffect } from "react";
 import React from "react";
@@ -393,9 +393,9 @@ export default function AdminProjects() {
                   <div className="col-span-1 text-center">Action</div>
                 </div>
 
-                {/* Projects list */}
+                {/* Projects list — urgent pinned on top, then most recently modified */}
                 <div className="divide-y divide-border">
-                  {projects.map((project) => (
+                  {sortProjectsForList(projects).map((project) => (
                     <div
                       key={project.id}
                       onClick={() => setPendingNavigation(project.id)}
