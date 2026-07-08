@@ -248,14 +248,14 @@ async function extractItemsWithAI(fullText: string): Promise<string[] | null> {
       prompt: `You are extracting a work-item checklist from a structural-steel construction proposal PDF.
 The proposal has a table with columns: Description, Qty, Rate, Total. The text below was extracted from the PDF, so column alignment may be lost.
 
-Return ONLY the values from the "Description" column — the names of the work items — as an ordered array of strings. Rules (follow strictly):
-1. Description text ONLY. NEVER include quantities, rates, unit prices, dollar amounts or totals (e.g. "183", "38.00", "6,954.00", "-3,058.00").
-2. If one item's description wraps across multiple lines, JOIN it into a SINGLE item. Example: "Cut 8" Openings On Existing Beams And" + "Reinforce With Stiffener Plates" becomes ONE item: "Cut 8" Openings On Existing Beams And Reinforce With Stiffener Plates".
-3. Exclude the column header row ("Description", "Qty", "Rate", "Total", "Amount").
-4. Exclude section titles such as "Fabrication And Installation" and "Scope Of Work".
-5. Exclude summary/adjustment rows: "Discount", "Subtotal", "Tax", "Total", and any pricing notes, terms, addresses, phone numbers or contact lines.
-6. Keep each description exactly as written — do not paraphrase, summarize, or add words.
-7. Preserve the original top-to-bottom order. Location/group labels that appear as their own rows (e.g. "Staircase A") may be kept as separate items.
+Return, as an ordered array of strings, ONLY the Description-column values of PRICED LINE ITEMS. Rules (follow strictly):
+1. INCLUDE a description ONLY if that row has a Quantity and/or Rate and/or Total value beside it (i.e. it is an actual priced line item).
+2. EXCLUDE any description that has NO Qty/Rate/Total value next to it — those are section headings or group labels, NOT checklist items. Examples to exclude: "Fabrication And Installation", "Scope Of Work", "Staircase A", "Staircase B".
+3. Description text ONLY — NEVER include the quantity, rate, unit price, dollar amount or total in the item text (e.g. "157", "133.00", "20,881.00").
+4. If one item's description wraps across multiple lines, JOIN it into a SINGLE item. Example: "Back Balcony Aluminum Railing - Standard" + "Design (powder coated)" becomes ONE item: "Back Balcony Aluminum Railing - Standard Design (powder coated)".
+5. Exclude the column header row ("Description", "Qty", "Rate", "Total", "Amount").
+6. Exclude summary/adjustment rows: "Discount", "Subtotal", "Tax", "Total", and any pricing notes, terms, addresses, phone numbers or contact lines.
+7. Keep each description exactly as written — do not paraphrase, summarize, or add words. Preserve the original top-to-bottom order.
 
 PDF TEXT:
 """
