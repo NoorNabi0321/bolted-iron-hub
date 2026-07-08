@@ -303,9 +303,11 @@ export default function AdminProjectDetail() {
   const assignedSubIds = assignments.map((a) => a.subcontractorId);
   const unassignedSubs = subs.filter((s) => !assignedSubIds.includes(s.id));
 
-  // Completed items sink to the bottom; everything else keeps its order.
+  // Active items on top (incomplete before completed); inactive items below all
+  // active ones. Activating an item moves it up out of the inactive group.
   const sortedChecklistItems = [...checklistItems].sort((a, b) => {
-    if (a.isCompleted !== b.isCompleted) return a.isCompleted ? 1 : -1;
+    if (!a.isActive !== !b.isActive) return a.isActive ? -1 : 1; // active first, inactive last
+    if (a.isActive && a.isCompleted !== b.isCompleted) return a.isCompleted ? 1 : -1; // completed sink within active
     return a.order - b.order;
   });
 

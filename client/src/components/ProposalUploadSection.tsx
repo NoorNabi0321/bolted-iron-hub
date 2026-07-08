@@ -38,7 +38,7 @@ export function ProposalUploadSection({
   const [isUploading, setIsUploading] = useState(false);
   const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
-  const [pendingMode, setPendingMode] = useState<UploadMode>("replace");
+  const [pendingMode, setPendingMode] = useState<UploadMode>("append");
   
   // Local state for immediate UI update - synced with props
   const [localProposalFileUrl, setLocalProposalFileUrl] = useState<string | null>(proposalFileUrl || null);
@@ -235,7 +235,7 @@ export function ProposalUploadSection({
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              onClick={() => handleClick("replace")}
+              onClick={() => handleClick("append")}
               className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
                 isDragging
                   ? "border-blue-500 bg-blue-50"
