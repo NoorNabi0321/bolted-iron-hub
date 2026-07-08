@@ -210,44 +210,25 @@ export function ProposalUploadSection({
                 </button>
               </div>
 
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleClick("replace")}
-                  disabled={isUploading}
-                >
-                  {isUploading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Uploading...
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="w-4 h-4 mr-2" />
-                      Replace Checklist Items
-                    </>
-                  )}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleClick("append")}
-                  disabled={isUploading}
-                >
-                  {isUploading && pendingMode === "append" ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Uploading...
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add New Checklist Items
-                    </>
-                  )}
-                </Button>
-              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleClick("append")}
+                disabled={isUploading}
+                className="w-full sm:w-auto"
+              >
+                {isUploading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add New Checklist Items
+                  </>
+                )}
+              </Button>
             </div>
           ) : (
             <div
