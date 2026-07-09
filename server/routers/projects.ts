@@ -44,6 +44,8 @@ import {
   getChecklistItemById,
   logChecklistActivity,
   getChecklistActivityBetween,
+  getReportSnapshotProgress,
+  saveReportSnapshots,
 } from "../db";
 import { protectedProcedure, router } from "../_core/trpc";
 import { generateSchedulePDF, ScheduleData, generateProjectsListPDF, ProjectsListData, ProjectsListPDFOptions } from "../_core/pdfGenerator";
@@ -158,52 +160,70 @@ export const projectsRouter = router({
     .input(z.object({ projectId: z.number().optional() }).optional())
     .mutation(async ({ input }) => {
       const { weekStart, weekEnd } = getWeekWindow();
-      const activity = await getChecklistActivityBetween(weekStart, weekEnd, input?.projectId);
+      const prevWeekStart = new Date(weekStart);
+      prevWeekStart.setDate(prevWeekStart.getDate() - 7);
 
-      const order: number[] = [];
-      const byProject: Record<number, typeof activity> = {};
-      for (const a of activity) {
-        if (!byProject[a.projectId]) {
-          byProject[a.projectId] = [];
-          order.push(a.projectId);
-        }
-        byProject[a.projectId].push(a);
+      // One project, or every non-archived project (including Inspection Passed).
+      let projectList;
+      if (input?.projectId) {
+        const p = await getProjectById(input.projectId);
+        projectList = p ? [p] : [];
+      } else {
+        projectList = await getAllProjects({ isArchived: false, includeInspectionPassed: true });
       }
 
       const projectsData = [];
       let totalActions = 0;
-      for (const pid of order) {
-        const acts = byProject[pid];
-        const project = await getProjectById(pid);
-        if (!project) continue;
-        const items = await getChecklistItemsForProject(pid);
-        const extracted = items.filter((i) => i.source === "extracted" && i.isActive);
-        const totalCount = extracted.length;
-        const completedCount = extracted.filter((i) => i.isCompleted).length;
-        const completionPercentage = totalCount
-          ? Math.round(extracted.reduce((s, i) => s + (i.isCompleted ? 100 : (i.progress ?? 0)), 0) / totalCount)
+      for (const project of projectList) {
+        // Full proposal checklist for this project — active AND inactive.
+        const items = (await getChecklistItemsForProject(project.id))
+          .filter((i) => i.source === "extracted")
+          .sort((a, b) => a.order - b.order);
+        if (items.length === 0) continue;
+
+        const prevMap = await getReportSnapshotProgress(project.id, prevWeekStart);
+        const hadBaseline = prevMap.size > 0;
+
+        const reportItems = items.map((i) => {
+          const current = i.isCompleted ? 100 : (i.progress ?? 0);
+          const prev = prevMap.get(i.id);
+          return {
+            text: i.text,
+            progress: current,
+            isActive: i.isActive,
+            isCompleted: i.isCompleted,
+            change: prev === undefined ? null : current - prev, // null => no baseline ("-")
+          };
+        });
+
+        // Overall progress = average across ACTIVE items (inactive don't count).
+        const activeItems = reportItems.filter((i) => i.isActive);
+        const overallProgress = activeItems.length
+          ? Math.round(activeItems.reduce((s, i) => s + i.progress, 0) / activeItems.length)
           : 0;
+
+        // Changed this week if any item moved, or a new item appeared after a baseline existed.
+        const changedCount = reportItems.filter(
+          (i) => (i.change !== null && i.change !== 0) || (i.change === null && hadBaseline)
+        ).length;
+        const noChange = hadBaseline && changedCount === 0;
+        totalActions += changedCount;
+
         projectsData.push({
           id: project.id,
           name: project.name,
           status: project.status,
-          completionPercentage,
-          completedCount,
-          totalCount,
-          items: extracted.map((i) => ({
-            text: i.text,
-            progress: i.isCompleted ? 100 : (i.progress ?? 0),
-            isCompleted: i.isCompleted,
-          })),
-          activities: acts.map((a) => ({
-            createdAt: a.createdAt,
-            itemText: a.itemText,
-            action: a.action,
-            progress: a.progress,
-            actorName: a.actorName,
-          })),
+          overallProgress,
+          noChange,
+          items: reportItems,
         });
-        totalActions += acts.length;
+
+        // Snapshot this week's progress so next week can compute the change.
+        await saveReportSnapshots(
+          project.id,
+          weekStart,
+          items.map((i) => ({ itemId: i.id, progress: i.isCompleted ? 100 : (i.progress ?? 0) }))
+        );
       }
       projectsData.sort((a, b) => a.name.localeCompare(b.name));
 
@@ -212,7 +232,6 @@ export const projectsRouter = router({
         weekStart,
         weekEnd,
         generatedAt: new Date(),
-        totalActions,
         projects: projectsData,
       });
 

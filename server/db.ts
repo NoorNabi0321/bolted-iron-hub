@@ -33,6 +33,7 @@ import {
   weeklyReports,
 } from "../drizzle/schema";
 import { checklistActivity, type InsertChecklistActivity, type ChecklistActivity } from "../drizzle/schema";
+import { reportSnapshots } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -895,5 +896,38 @@ export async function getChecklistActivityBetween(
     .from(checklistActivity)
     .where(and(...conditions))
     .orderBy(checklistActivity.projectId, checklistActivity.createdAt);
+}
+
+/** Progress captured for a project's items in a specific report week: itemId -> progress. */
+export async function getReportSnapshotProgress(
+  projectId: number,
+  weekStart: Date
+): Promise<Map<number, number>> {
+  const db = await getDb();
+  const map = new Map<number, number>();
+  if (!db) return map;
+  const rows = await db
+    .select()
+    .from(reportSnapshots)
+    .where(and(eq(reportSnapshots.projectId, projectId), eq(reportSnapshots.weekStart, weekStart)));
+  for (const r of rows) map.set(r.itemId, r.progress);
+  return map;
+}
+
+/** Replace a project's snapshots for a report week with the given item progress values. */
+export async function saveReportSnapshots(
+  projectId: number,
+  weekStart: Date,
+  entries: Array<{ itemId: number; progress: number }>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .delete(reportSnapshots)
+    .where(and(eq(reportSnapshots.projectId, projectId), eq(reportSnapshots.weekStart, weekStart)));
+  if (entries.length === 0) return;
+  await db.insert(reportSnapshots).values(
+    entries.map((e) => ({ projectId, weekStart, itemId: e.itemId, progress: e.progress }))
+  );
 }
 

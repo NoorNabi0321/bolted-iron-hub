@@ -391,3 +391,21 @@ export const checklistActivity = mysqlTable("checklist_activity", {
 
 export type ChecklistActivity = typeof checklistActivity.$inferSelect;
 export type InsertChecklistActivity = typeof checklistActivity.$inferInsert;
+
+// ─── Weekly Report Snapshots ──────────────────────────────────────────────────
+// One row per extracted checklist item per weekly report, storing that item's
+// progress at report time. The next week's report compares against it to
+// compute the "Change" column.
+export const reportSnapshots = mysqlTable("report_snapshots", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: int("projectId").notNull(),
+  itemId: int("itemId").notNull(),
+  /** Wednesday 00:00 of the report week this snapshot belongs to. */
+  weekStart: timestamp("weekStart").notNull(),
+  /** Item progress 0-100 (100 when completed) captured at report time. */
+  progress: int("progress").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ReportSnapshot = typeof reportSnapshots.$inferSelect;
+export type InsertReportSnapshot = typeof reportSnapshots.$inferInsert;

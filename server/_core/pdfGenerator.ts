@@ -5,21 +5,19 @@ export interface ChecklistProgressReportOptions {
   weekStart: Date;
   weekEnd: Date;
   generatedAt: Date;
-  totalActions: number;
   projects: Array<{
     id: number;
     name: string;
     status: string;
-    completionPercentage: number;
-    completedCount: number;
-    totalCount: number;
-    items: Array<{ text: string; progress: number; isCompleted: boolean }>;
-    activities: Array<{
-      createdAt: Date;
-      itemText: string;
-      action: string; // "completed" | "reopened" | "progress_updated"
-      progress: number | null;
-      actorName: string | null;
+    overallProgress: number;
+    noChange: boolean;
+    items: Array<{
+      text: string;
+      progress: number;
+      isActive: boolean;
+      isCompleted: boolean;
+      /** Progress delta since last week's report; null when there is no baseline. */
+      change: number | null;
     }>;
   }>;
 }
@@ -27,18 +25,26 @@ export interface ChecklistProgressReportOptions {
 export async function generateChecklistProgressPDF(
   options: ChecklistProgressReportOptions
 ): Promise<Buffer> {
-  const { weekStart, weekEnd, generatedAt, totalActions, projects } = options;
+  const { weekStart, weekEnd, generatedAt, projects } = options;
 
   const pdfDoc = await PDFDocument.create();
-  const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
   const pageWidth = 595;
   const pageHeight = 842;
   const margin = 40;
   const contentWidth = pageWidth - 2 * margin;
+  const tableRight = pageWidth - margin;
+
+  const navy = rgb(23 / 255, 37 / 255, 70 / 255);
+  const white = rgb(1, 1, 1);
+  const green = rgb(22 / 255, 163 / 255, 74 / 255);
+  const amber = rgb(202 / 255, 138 / 255, 4 / 255);
+  const grey = rgb(148 / 255, 163 / 255, 184 / 255);
   const red = rgb(220 / 255, 38 / 255, 38 / 255);
-  const muted = rgb(120 / 255, 120 / 255, 120 / 255);
+  const textDark = rgb(30 / 255, 41 / 255, 59 / 255);
+  const border = rgb(226 / 255, 232 / 255, 240 / 255);
 
   const sanitize = (text: unknown): string => {
     if (text === null || text === undefined) return "";
@@ -50,7 +56,6 @@ export async function generateChecklistProgressPDF(
         if (ch === "–" || ch === "—") return "-";
         if (ch === "’" || ch === "‘") return "'";
         if (ch === "“" || ch === "”") return '"';
-        if (ch === "→") return "->";
         return "";
       })
       .join("");
@@ -58,146 +63,127 @@ export async function generateChecklistProgressPDF(
 
   const fmtDate = (d: Date) =>
     new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  const fmtDateTime = (d: Date) =>
-    new Date(d).toLocaleString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
 
-  const actionLabel = (a: ChecklistProgressReportOptions["projects"][number]["activities"][number]) => {
-    let item = sanitize(a.itemText);
-    if (item.length > 55) item = item.substring(0, 52) + "...";
-    if (a.action === "completed") return `Completed: "${item}"`;
-    if (a.action === "reopened") return `Reopened: "${item}"`;
-    return `Progress: "${item}" -> ${a.progress ?? 0}%`;
+  const fitText = (text: string, f: typeof font, size: number, maxWidth: number) => {
+    if (f.widthOfTextAtSize(text, size) <= maxWidth) return text;
+    let t = text;
+    while (t.length > 1 && f.widthOfTextAtSize(t + "...", size) > maxWidth) t = t.slice(0, -1);
+    return t + "...";
   };
 
   let page = pdfDoc.addPage([pageWidth, pageHeight]);
   let y = pageHeight - margin;
-
-  const drawHeader = () => {
+  const newPage = () => {
+    page = pdfDoc.addPage([pageWidth, pageHeight]);
     y = pageHeight - margin;
-    page.drawText(sanitize("Bolted Iron Hub"), { x: margin, y, size: 24, font: helveticaBold, color: red });
-    y -= 30;
-    page.drawLine({ start: { x: margin, y }, end: { x: pageWidth - margin, y }, thickness: 3, color: red });
-    y -= 18;
-    page.drawText(sanitize("Weekly Progress Report"), { x: margin, y, size: 15, font: helveticaBold, color: rgb(0, 0, 0) });
-    y -= 22;
+  };
+  const ensure = (needed: number) => {
+    if (y - needed < margin) newPage();
   };
 
-  const ensureSpace = (needed: number) => {
-    if (y - needed < margin) {
-      page = pdfDoc.addPage([pageWidth, pageHeight]);
-      drawHeader();
-    }
-  };
-
-  drawHeader();
-
-  for (const line of [
-    `Week: ${fmtDate(weekStart)} - ${fmtDate(weekEnd)}`,
-    `Active Projects: ${projects.length}    Total Actions: ${totalActions}`,
-    `Generated: ${fmtDateTime(generatedAt)}`,
-  ]) {
-    page.drawText(sanitize(line), { x: margin, y, size: 10, font: helvetica, color: rgb(60 / 255, 60 / 255, 60 / 255) });
-    y -= 15;
-  }
-  y -= 8;
+  // ── Report header ──
+  page.drawText(sanitize("BOLTED IRON HUB"), { x: margin, y: y - 18, size: 20, font: bold, color: navy });
+  y -= 26;
+  page.drawText(sanitize("WEEKLY PROGRESS REPORT"), { x: margin, y: y - 14, size: 14, font: bold, color: navy });
+  y -= 26;
+  page.drawText(sanitize(`Report Week: ${fmtDate(weekStart)} - ${fmtDate(weekEnd)}`), { x: margin, y: y - 10, size: 9, font: bold, color: textDark });
+  y -= 14;
+  page.drawText(sanitize(`Generated: ${fmtDate(generatedAt)}`), { x: margin, y: y - 10, size: 9, font: bold, color: textDark });
+  y -= 12;
+  page.drawLine({ start: { x: margin, y }, end: { x: tableRight, y }, thickness: 1, color: border });
+  y -= 18;
 
   if (projects.length === 0) {
-    page.drawText(sanitize("No checklist activity was recorded for this week."), {
-      x: margin,
-      y,
-      size: 11,
-      font: helvetica,
-      color: rgb(0, 0, 0),
-    });
+    page.drawText(sanitize("No projects with an extracted proposal checklist yet."), { x: margin, y: y - 12, size: 11, font, color: textDark });
   }
 
-  // Shared layout columns (consistent indentation + alignment across projects).
-  const labelX = margin + 8;       // section labels + total
-  const rowX = margin + 18;        // item text, item bars, action timestamps
-  const actionDescX = margin + 140; // action description column
-  const pctRight = pageWidth - margin; // right edge for % (right-aligned) and bars
-  const barRight = pctRight - 42;  // bars end here, leaving room for the %
-  const dark = rgb(40 / 255, 40 / 255, 40 / 255);
-  const dark2 = rgb(25 / 255, 25 / 255, 25 / 255);
-  const barBg = rgb(229 / 255, 231 / 255, 235 / 255);
-  const green = rgb(34 / 255, 197 / 255, 94 / 255);
+  // Column geometry
+  const colNumX = margin;
+  const colNumW = 34;
+  const colItemX = margin + colNumW;
+  const progCenter = 398;
+  const changeLeft = 470;
+  const changeCenter = changeLeft + (tableRight - changeLeft) / 2;
 
-  const fitText = (text: string, font: typeof helvetica, size: number, maxWidth: number) => {
-    let t = text;
-    while (t.length > 0 && font.widthOfTextAtSize(t, size) > maxWidth) t = t.slice(0, -1);
-    return t;
-  };
-
+  let projNum = 0;
   for (const proj of projects) {
-    ensureSpace(72);
-    // Project header bar: name (left) + status (right)
-    page.drawRectangle({ x: margin, y: y - 22, width: contentWidth, height: 22, color: red });
-    page.drawText(fitText(sanitize(proj.name), helveticaBold, 11, contentWidth - 110), {
-      x: labelX,
-      y: y - 15,
-      size: 11,
-      font: helveticaBold,
-      color: rgb(1, 1, 1),
-    });
-    const statusText = sanitize(proj.status);
-    const stWidth = helvetica.widthOfTextAtSize(statusText, 9);
-    page.drawText(statusText, { x: pageWidth - margin - stWidth - 8, y: y - 15, size: 9, font: helvetica, color: rgb(1, 1, 1) });
-    y -= 32;
+    projNum++;
+    ensure(52);
 
-    // Actions performed this week
-    if (proj.activities.length > 0) {
-      page.drawText(sanitize("Actions this week"), { x: labelX, y: y - 9, size: 9, font: helveticaBold, color: dark });
-      y -= 17;
-      for (const act of proj.activities) {
-        ensureSpace(15);
-        page.drawText(sanitize(fmtDateTime(act.createdAt)), { x: rowX, y: y - 9, size: 8, font: helvetica, color: muted });
-        let label = sanitize(actionLabel(act));
-        if (act.actorName) label += ` (by ${sanitize(act.actorName)})`;
-        page.drawText(fitText(label, helvetica, 9, pctRight - actionDescX), { x: actionDescX, y: y - 9, size: 9, font: helvetica, color: dark2 });
-        y -= 15;
-      }
-      y -= 8;
+    // Project header: number badge + name (+ overall progress badge)
+    const badge = 20;
+    const topY = y;
+    page.drawRectangle({ x: margin, y: topY - badge, width: badge, height: badge, color: navy });
+    const numStr = String(projNum);
+    page.drawText(numStr, { x: margin + (badge - bold.widthOfTextAtSize(numStr, 11)) / 2, y: topY - badge + 6, size: 11, font: bold, color: white });
+
+    let nameMaxW = contentWidth - badge - 10;
+    if (!proj.noChange) {
+      const opLabel = "OVERALL PROGRESS: ";
+      const opVal = `${proj.overallProgress}%`;
+      const opLabelW = font.widthOfTextAtSize(opLabel, 8);
+      const opValW = bold.widthOfTextAtSize(opVal, 11);
+      const boxW = opLabelW + opValW + 16;
+      const boxX = tableRight - boxW;
+      page.drawRectangle({ x: boxX, y: topY - badge - 1, width: boxW, height: badge + 2, color: white, borderColor: border, borderWidth: 1 });
+      page.drawText(opLabel, { x: boxX + 8, y: topY - badge + 6, size: 8, font, color: grey });
+      page.drawText(opVal, { x: boxX + 8 + opLabelW, y: topY - badge + 5, size: 11, font: bold, color: navy });
+      nameMaxW = boxX - (margin + badge + 10) - 8;
+    }
+    page.drawText(fitText(sanitize(proj.name.toUpperCase()), bold, 12, nameMaxW), { x: margin + badge + 10, y: topY - badge + 5, size: 12, font: bold, color: navy });
+    y = topY - badge - 14;
+
+    // Collapsed project — single "No Change This Week" pill.
+    if (proj.noChange) {
+      ensure(26);
+      const pill = "No Change This Week";
+      const pillW = bold.widthOfTextAtSize(pill, 10) + 28;
+      const pillX = margin + (contentWidth - pillW) / 2;
+      page.drawRectangle({ x: pillX, y: y - 20, width: pillW, height: 22, color: rgb(17 / 255, 24 / 255, 39 / 255) });
+      page.drawText(pill, { x: pillX + 14, y: y - 13, size: 10, font: bold, color: white });
+      y -= 38;
+      continue;
     }
 
-    // Each checklist item with its progress line directly below it
-    if (proj.items.length > 0) {
-      ensureSpace(16);
-      page.drawText(sanitize("Checklist items"), { x: labelX, y: y - 9, size: 9, font: helveticaBold, color: dark });
-      y -= 17;
-      const itemBarW = barRight - rowX;
-      for (const item of proj.items) {
-        ensureSpace(24);
-        const itemLabel = fitText(sanitize((item.isCompleted ? "[x] " : "[ ] ") + item.text), helvetica, 9, barRight - rowX);
-        page.drawText(itemLabel, { x: rowX, y: y - 9, size: 9, font: helvetica, color: item.isCompleted ? muted : dark2 });
-        y -= 12;
-        // progress bar (same left edge as the item text)
-        page.drawRectangle({ x: rowX, y: y - 4, width: itemBarW, height: 4, color: barBg });
-        page.drawRectangle({ x: rowX, y: y - 4, width: (itemBarW * item.progress) / 100, height: 4, color: green });
-        const pctText = `${item.progress}%`;
-        const pctW = helveticaBold.widthOfTextAtSize(pctText, 8);
-        page.drawText(pctText, { x: pctRight - pctW, y: y - 6, size: 8, font: helveticaBold, color: dark });
-        y -= 14;
-      }
-      y -= 6;
-    }
+    // Table header
+    ensure(24);
+    const thH = 18;
+    page.drawRectangle({ x: margin, y: y - thH, width: contentWidth, height: thH, color: navy });
+    page.drawText("#", { x: colNumX + (colNumW - bold.widthOfTextAtSize("#", 8)) / 2, y: y - 12, size: 8, font: bold, color: white });
+    page.drawText("PROPOSAL ITEM", { x: colItemX + 6, y: y - 12, size: 8, font: bold, color: white });
+    page.drawText("CURRENT PROGRESS", { x: progCenter - bold.widthOfTextAtSize("CURRENT PROGRESS", 8) / 2, y: y - 12, size: 8, font: bold, color: white });
+    page.drawText("CHANGE", { x: changeCenter - bold.widthOfTextAtSize("CHANGE", 8) / 2, y: y - 12, size: 8, font: bold, color: white });
+    y -= thH;
 
-    // Overall total progress at the end of the project
-    ensureSpace(28);
-    page.drawText(
-      sanitize(`Total Progress: ${proj.completionPercentage}%   (${proj.completedCount} of ${proj.totalCount} items complete)`),
-      { x: labelX, y: y - 9, size: 10, font: helveticaBold, color: red }
-    );
+    // Rows — every proposal item (active AND inactive).
+    let idx = 0;
+    for (const item of proj.items) {
+      idx++;
+      ensure(20);
+      const rowH = 20;
+      const midY = y - rowH / 2;
+      const textY = midY - 3;
+      page.drawText(String(idx), { x: colNumX + (colNumW - font.widthOfTextAtSize(String(idx), 9)) / 2, y: textY, size: 9, font, color: textDark });
+      const itemMaxW = progCenter - 40 - (colItemX + 6);
+      page.drawText(fitText(sanitize(item.text), font, 9, itemMaxW), { x: colItemX + 6, y: textY, size: 9, font, color: textDark });
+      // status dot + progress %
+      const isDone = item.isCompleted || item.progress >= 100;
+      const isZero = !item.isActive || item.progress <= 0;
+      const stColor = isDone ? green : isZero ? grey : amber;
+      page.drawEllipse({ x: progCenter - 24, y: midY, xScale: 3.5, yScale: 3.5, color: stColor });
+      page.drawText(`${item.progress}%`, { x: progCenter - 12, y: textY, size: 9, font: bold, color: stColor });
+      // change delta or dash
+      if (item.change === null || item.change === 0) {
+        page.drawLine({ start: { x: changeCenter - 5, y: midY }, end: { x: changeCenter + 5, y: midY }, thickness: 1.3, color: grey });
+      } else {
+        const up = item.change > 0;
+        const chText = `${up ? "+" : ""}${item.change}%`;
+        page.drawText(chText, { x: changeCenter - bold.widthOfTextAtSize(chText, 9) / 2 + 3, y: textY, size: 9, font: bold, color: up ? green : red });
+      }
+      page.drawLine({ start: { x: margin, y: y - rowH }, end: { x: tableRight, y: y - rowH }, thickness: 0.5, color: border });
+      y -= rowH;
+    }
     y -= 16;
-    const totalBarW = barRight - labelX;
-    page.drawRectangle({ x: labelX, y: y - 4, width: totalBarW, height: 6, color: barBg });
-    page.drawRectangle({ x: labelX, y: y - 4, width: (totalBarW * proj.completionPercentage) / 100, height: 6, color: green });
-    y -= 26;
   }
 
   const bytes = await pdfDoc.save();
