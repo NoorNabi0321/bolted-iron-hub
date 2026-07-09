@@ -898,6 +898,27 @@ export async function getChecklistActivityBetween(
     .orderBy(checklistActivity.projectId, checklistActivity.createdAt);
 }
 
+/**
+ * Each item's progress as of `date` (the most recent logged progress strictly
+ * before it). Items with no prior activity are absent (treat as 0). Used as the
+ * start-of-week baseline for the weekly "Change" column.
+ */
+export async function getChecklistProgressAsOf(
+  projectId: number,
+  date: Date
+): Promise<Map<number, number>> {
+  const db = await getDb();
+  const map = new Map<number, number>();
+  if (!db) return map;
+  const rows = await db
+    .select()
+    .from(checklistActivity)
+    .where(and(eq(checklistActivity.projectId, projectId), lt(checklistActivity.createdAt, date)))
+    .orderBy(checklistActivity.createdAt);
+  for (const r of rows) if (r.progress !== null && r.progress !== undefined) map.set(r.itemId, r.progress);
+  return map;
+}
+
 /** Progress captured for a project's items in a specific report week: itemId -> progress. */
 export async function getReportSnapshotProgress(
   projectId: number,

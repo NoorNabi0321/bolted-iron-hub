@@ -44,8 +44,7 @@ import {
   getChecklistItemById,
   logChecklistActivity,
   getChecklistActivityBetween,
-  getReportSnapshotProgress,
-  saveReportSnapshots,
+  getChecklistProgressAsOf,
 } from "../db";
 import { protectedProcedure, router } from "../_core/trpc";
 import { generateSchedulePDF, ScheduleData, generateProjectsListPDF, ProjectsListData, ProjectsListPDFOptions } from "../_core/pdfGenerator";
@@ -160,8 +159,14 @@ export const projectsRouter = router({
     .input(z.object({ projectId: z.number().optional() }).optional())
     .mutation(async ({ input }) => {
       const { weekStart, weekEnd } = getWeekWindow();
-      const prevWeekStart = new Date(weekStart);
-      prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+
+      // Which items were touched this week (since last Wednesday), per project.
+      const weekActivity = await getChecklistActivityBetween(weekStart, weekEnd, input?.projectId);
+      const affectedByProject = new Map<number, Set<number>>();
+      for (const a of weekActivity) {
+        if (!affectedByProject.has(a.projectId)) affectedByProject.set(a.projectId, new Set());
+        affectedByProject.get(a.projectId)!.add(a.itemId);
+      }
 
       // One project, or every non-archived project (including Inspection Passed).
       let projectList;
@@ -181,33 +186,38 @@ export const projectsRouter = router({
           .sort((a, b) => a.order - b.order);
         if (items.length === 0) continue;
 
-        const prevMap = await getReportSnapshotProgress(project.id, prevWeekStart);
-        const hadBaseline = prevMap.size > 0;
-
-        const reportItems = items.map((i) => {
-          const current = i.isCompleted ? 100 : (i.progress ?? 0);
-          const prev = prevMap.get(i.id);
-          return {
-            text: i.text,
-            progress: current,
-            isActive: i.isActive,
-            isCompleted: i.isCompleted,
-            change: prev === undefined ? null : current - prev, // null => no baseline ("-")
-          };
-        });
+        const affected = affectedByProject.get(project.id) ?? new Set<number>();
+        const noChange = affected.size === 0; // no checklist activity this week -> collapse
+        totalActions += affected.size;
 
         // Overall progress = average across ACTIVE items (inactive don't count).
-        const activeItems = reportItems.filter((i) => i.isActive);
+        const activeItems = items.filter((i) => i.isActive);
         const overallProgress = activeItems.length
-          ? Math.round(activeItems.reduce((s, i) => s + i.progress, 0) / activeItems.length)
+          ? Math.round(activeItems.reduce((s, i) => s + (i.isCompleted ? 100 : (i.progress ?? 0)), 0) / activeItems.length)
           : 0;
 
-        // Changed this week if any item moved, or a new item appeared after a baseline existed.
-        const changedCount = reportItems.filter(
-          (i) => (i.change !== null && i.change !== 0) || (i.change === null && hadBaseline)
-        ).length;
-        const noChange = hadBaseline && changedCount === 0;
-        totalActions += changedCount;
+        // Only build the item rows when the project changed this week; the change
+        // for each affected item is its current progress minus its start-of-week value.
+        let reportItems: Array<{
+          text: string;
+          progress: number;
+          isActive: boolean;
+          isCompleted: boolean;
+          change: number | null;
+        }> = [];
+        if (!noChange) {
+          const baseline = await getChecklistProgressAsOf(project.id, weekStart);
+          reportItems = items.map((i) => {
+            const current = i.isCompleted ? 100 : (i.progress ?? 0);
+            return {
+              text: i.text,
+              progress: current,
+              isActive: i.isActive,
+              isCompleted: i.isCompleted,
+              change: affected.has(i.id) ? current - (baseline.get(i.id) ?? 0) : null,
+            };
+          });
+        }
 
         projectsData.push({
           id: project.id,
@@ -217,13 +227,6 @@ export const projectsRouter = router({
           noChange,
           items: reportItems,
         });
-
-        // Snapshot this week's progress so next week can compute the change.
-        await saveReportSnapshots(
-          project.id,
-          weekStart,
-          items.map((i) => ({ itemId: i.id, progress: i.isCompleted ? 100 : (i.progress ?? 0) }))
-        );
       }
       projectsData.sort((a, b) => a.name.localeCompare(b.name));
 
