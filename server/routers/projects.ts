@@ -203,6 +203,7 @@ export const projectsRouter = router({
           progress: number;
           isActive: boolean;
           isCompleted: boolean;
+          isUserAdded: boolean;
           change: number | null;
         }> = [];
         if (!noChange) {
@@ -214,6 +215,7 @@ export const projectsRouter = router({
               progress: current,
               isActive: i.isActive,
               isCompleted: i.isCompleted,
+              isUserAdded: i.isUserAdded,
               change: affected.has(i.id) ? current - (baseline.get(i.id) ?? 0) : null,
             };
           });

@@ -16,6 +16,8 @@ export interface ChecklistProgressReportOptions {
       progress: number;
       isActive: boolean;
       isCompleted: boolean;
+      /** true = added via Change Order / Add New Item; false = from the proposal PDF. */
+      isUserAdded: boolean;
       /** Progress delta since last week's report; null when there is no baseline. */
       change: number | null;
     }>;
@@ -164,8 +166,19 @@ export async function generateChecklistProgressPDF(
       const midY = y - rowH / 2;
       const textY = midY - 3;
       page.drawText(String(idx), { x: colNumX + (colNumW - font.widthOfTextAtSize(String(idx), 9)) / 2, y: textY, size: 9, font, color: textDark });
-      const itemMaxW = progCenter - 40 - (colItemX + 6);
-      page.drawText(fitText(sanitize(item.text), font, 9, itemMaxW), { x: colItemX + 6, y: textY, size: 9, font, color: textDark });
+      const itemMaxW = progCenter - 95 - (colItemX + 6);
+      const itemText = fitText(sanitize(item.text), font, 9, itemMaxW);
+      page.drawText(itemText, { x: colItemX + 6, y: textY, size: 9, font, color: textDark });
+      // Source tag: "Added" (Change Order / Add New Item) vs "Proposal" (uploaded PDF).
+      {
+        const tagLabel = item.isUserAdded ? "Added" : "Proposal";
+        const tagCol = item.isUserAdded ? rgb(37 / 255, 99 / 255, 235 / 255) : grey;
+        const tagBg = item.isUserAdded ? rgb(219 / 255, 234 / 255, 254 / 255) : rgb(241 / 255, 245 / 255, 249 / 255);
+        const tw = bold.widthOfTextAtSize(tagLabel, 7);
+        const tagX = colItemX + 6 + font.widthOfTextAtSize(itemText, 9) + 6;
+        page.drawRectangle({ x: tagX, y: midY - 6, width: tw + 8, height: 12, color: tagBg, borderColor: tagCol, borderWidth: 0.5 });
+        page.drawText(tagLabel, { x: tagX + 4, y: textY, size: 7, font: bold, color: tagCol });
+      }
       // status dot + progress %
       const isDone = item.isCompleted || item.progress >= 100;
       const isZero = !item.isActive || item.progress <= 0;
