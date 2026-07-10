@@ -94,18 +94,17 @@ export default function ProjectProgressDetail() {
                   ) : (
                     <Circle className="w-4 h-4 text-gray-400 flex-shrink-0" />
                   )}
-                  <span className={`flex-1 min-w-0 text-sm break-words ${item.isCompleted ? "line-through text-gray-400" : "text-foreground"}`}>
-                    {formatChecklistText(item.text)}
-                  </span>
                   <span
-                    className={`flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded border ${
-                      (item as { isUserAdded?: boolean }).isUserAdded
-                        ? "bg-blue-50 text-blue-700 border-blue-200"
-                        : "bg-gray-100 text-gray-500 border-gray-200"
+                    className={`flex-1 min-w-0 text-sm break-words ${
+                      item.isCompleted
+                        ? "line-through text-gray-400"
+                        : (item as { isUserAdded?: boolean }).isUserAdded
+                        ? "text-blue-700 font-medium"
+                        : "text-foreground"
                     }`}
                     title={(item as { isUserAdded?: boolean }).isUserAdded ? "Added via Change Order / Add New Item" : "From uploaded proposal PDF"}
                   >
-                    {(item as { isUserAdded?: boolean }).isUserAdded ? "Added" : "Proposal"}
+                    {formatChecklistText(item.text)}
                   </span>
                   <div className="flex items-center gap-2 w-36 flex-shrink-0">
                     <div className="flex-1 bg-secondary rounded-full h-1.5 overflow-hidden">

@@ -166,19 +166,17 @@ export async function generateChecklistProgressPDF(
       const midY = y - rowH / 2;
       const textY = midY - 3;
       page.drawText(String(idx), { x: colNumX + (colNumW - font.widthOfTextAtSize(String(idx), 9)) / 2, y: textY, size: 9, font, color: textDark });
-      const itemMaxW = progCenter - 95 - (colItemX + 6);
-      const itemText = fitText(sanitize(item.text), font, 9, itemMaxW);
-      page.drawText(itemText, { x: colItemX + 6, y: textY, size: 9, font, color: textDark });
-      // Source tag: "Added" (Change Order / Add New Item) vs "Proposal" (uploaded PDF).
-      {
-        const tagLabel = item.isUserAdded ? "Added" : "Proposal";
-        const tagCol = item.isUserAdded ? rgb(37 / 255, 99 / 255, 235 / 255) : grey;
-        const tagBg = item.isUserAdded ? rgb(219 / 255, 234 / 255, 254 / 255) : rgb(241 / 255, 245 / 255, 249 / 255);
-        const tw = bold.widthOfTextAtSize(tagLabel, 7);
-        const tagX = colItemX + 6 + font.widthOfTextAtSize(itemText, 9) + 6;
-        page.drawRectangle({ x: tagX, y: midY - 6, width: tw + 8, height: 12, color: tagBg, borderColor: tagCol, borderWidth: 0.5 });
-        page.drawText(tagLabel, { x: tagX + 4, y: textY, size: 7, font: bold, color: tagCol });
-      }
+      const itemMaxW = progCenter - 40 - (colItemX + 6);
+      // Match the Extracted Checklist section: Change Order / Add New Item rows
+      // are blue; proposal-extracted rows are the normal dark text.
+      const itemColor = item.isUserAdded ? rgb(29 / 255, 78 / 255, 216 / 255) : textDark;
+      page.drawText(fitText(sanitize(item.text), font, 9, itemMaxW), {
+        x: colItemX + 6,
+        y: textY,
+        size: 9,
+        font: item.isUserAdded ? bold : font,
+        color: itemColor,
+      });
       // status dot + progress %
       const isDone = item.isCompleted || item.progress >= 100;
       const isZero = !item.isActive || item.progress <= 0;
