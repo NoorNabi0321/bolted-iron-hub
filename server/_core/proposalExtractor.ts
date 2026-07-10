@@ -37,18 +37,27 @@ function sanitizeText(text: string): string {
  */
 function isEndOfItemsMarker(text: string): boolean {
   const lower = text.toLowerCase();
-  
-  // These phrases mark the end of the items list
-  const endMarkers = [
-    "the pricing provided",
-    "please review",
-    "as part of the project",
-    "total:",
-    "bolted iron",
-    "office@",
-  ];
+
+  // Only phrases that mark the true end of the list (appear once, at the very end).
+  // Per-page footers (company name / email / "total:") repeat on every page, so
+  // they are skipped as noise instead — otherwise a multi-page proposal would
+  // stop extracting at the bottom of page 1.
+  const endMarkers = ["the pricing provided", "please review", "as part of the project"];
 
   return endMarkers.some((marker) => lower.includes(marker));
+}
+
+/** Repeated header/footer noise (per page) — skip these lines but keep scanning. */
+function isRepeatedNoiseLine(text: string): boolean {
+  const lower = text.toLowerCase().trim();
+  return (
+    lower.includes("bolted iron") ||
+    lower.includes("office@") ||
+    lower.startsWith("total:") ||
+    lower.startsWith("subtotal") ||
+    lower.startsWith("grand total") ||
+    /^page\s+\d+/.test(lower)
+  );
 }
 
 /**
@@ -76,9 +85,14 @@ function startsWithQuantity(text: string): boolean {
  * Check if a line is a table header
  */
 function isTableHeader(text: string): boolean {
-  const lower = text.toLowerCase();
+  const lower = text.toLowerCase().trim();
   const headers = ["description", "qty", "rate", "total", "amount"];
-  return headers.some((h) => lower === h);
+  if (headers.some((h) => lower === h)) return true;
+  // Combined header row that repeats on each page, e.g. "Description Qty Rate Total".
+  return (
+    lower.includes("description") &&
+    (lower.includes("qty") || lower.includes("rate") || lower.includes("total"))
+  );
 }
 
 /**
@@ -88,7 +102,9 @@ async function extractTextFromPDF(pdfBuffer: Buffer): Promise<string> {
   try {
     const parser = new PDFParse({ data: pdfBuffer });
     const textResult = await parser.getText();
-    return textResult.text || "";
+    // Strip the page-break markers pdf-parse inserts between pages
+    // ("-- 1 of 2 --") so a multi-page proposal reads as one continuous list.
+    return (textResult.text || "").replace(/^[ \t]*--\s*\d+(?:\s+of\s+\d+)?\s*--[ \t]*$/gim, "");
   } catch (error) {
     throw new Error(
       `Failed to parse PDF: ${error instanceof Error ? error.message : String(error)}`
@@ -123,10 +139,14 @@ function findAndExtractSection(text: string): { items: string[]; sectionType: st
     }
 
     if (inSection) {
-      // Check if we've hit the end of items section
+      // Check if we've hit the true end of the items list
       if (isEndOfItemsMarker(line)) {
         break;
       }
+
+      // Skip per-page headers/footers that repeat across pages, but KEEP scanning
+      // so items on later pages are still collected.
+      if (isRepeatedNoiseLine(line)) continue;
 
       const sanitized = sanitizeText(line);
 
@@ -149,8 +169,12 @@ function findAndExtractSection(text: string): { items: string[]; sectionType: st
       // Skip lines with only numbers and symbols (no letters)
       if (!/[a-zA-Z]/.test(sanitized)) continue;
 
-      // This is a valid item
-      items.push(sanitized);
+      // Strip trailing Qty/Rate/Total number columns so the item is just the
+      // description (heuristic fallback approximation of the AI behaviour).
+      const cleaned = sanitized.replace(/\s+[-$]?[\d.,]+(?:\s+[-$]?[\d.,]+)*$/, "").trim();
+      if (!cleaned || !/[a-zA-Z]/.test(cleaned)) continue;
+
+      items.push(cleaned);
     }
   }
 
@@ -256,6 +280,7 @@ Return, as an ordered array of strings, ONLY the Description-column values of PR
 5. Exclude the column header row ("Description", "Qty", "Rate", "Total", "Amount").
 6. Exclude summary/adjustment rows: "Discount", "Subtotal", "Tax", "Total", and any pricing notes, terms, addresses, phone numbers or contact lines.
 7. Keep each description exactly as written — do not paraphrase, summarize, or add words. Preserve the original top-to-bottom order.
+8. The text may span MULTIPLE PAGES. Extract items from EVERY page. Ignore page-break markers, the column header row when it repeats on later pages, and any company name / address / email footer that repeats on each page.
 
 PDF TEXT:
 """
