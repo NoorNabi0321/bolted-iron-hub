@@ -45,6 +45,7 @@ import {
   logChecklistActivity,
   getChecklistActivityBetween,
   getChecklistProgressAsOf,
+  getAllSubcontractors,
 } from "../db";
 import { protectedProcedure, router } from "../_core/trpc";
 import { generateSchedulePDF, ScheduleData, generateProjectsListPDF, ProjectsListData, ProjectsListPDFOptions } from "../_core/pdfGenerator";
@@ -160,6 +161,9 @@ export const projectsRouter = router({
     .mutation(async ({ input }) => {
       const { weekStart, weekEnd } = getWeekWindow();
 
+      // Subcontractor id -> company name, for the "Assigned To" column.
+      const subMap = new Map((await getAllSubcontractors()).map((s) => [s.id, s.companyName]));
+
       // Which items were touched this week (since last Wednesday), per project.
       const weekActivity = await getChecklistActivityBetween(weekStart, weekEnd, input?.projectId);
       const affectedByProject = new Map<number, Set<number>>();
@@ -204,6 +208,7 @@ export const projectsRouter = router({
           isActive: boolean;
           isCompleted: boolean;
           isUserAdded: boolean;
+          assignedTo: string | null;
           change: number | null;
         }> = [];
         if (!noChange) {
@@ -216,6 +221,7 @@ export const projectsRouter = router({
               isActive: i.isActive,
               isCompleted: i.isCompleted,
               isUserAdded: i.isUserAdded,
+              assignedTo: i.assignedSubcontractorId ? (subMap.get(i.assignedSubcontractorId) ?? null) : null,
               change: affected.has(i.id) ? current - (baseline.get(i.id) ?? 0) : null,
             };
           });

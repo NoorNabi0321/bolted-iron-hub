@@ -18,6 +18,8 @@ export interface ChecklistProgressReportOptions {
       isCompleted: boolean;
       /** true = added via Change Order / Add New Item; false = from the proposal PDF. */
       isUserAdded: boolean;
+      /** Assigned subcontractor company name, or null when unassigned. */
+      assignedTo: string | null;
       /** Progress delta since last week's report; null when there is no baseline. */
       change: number | null;
     }>;
@@ -99,12 +101,13 @@ export async function generateChecklistProgressPDF(
     page.drawText(sanitize("No projects with an extracted proposal checklist yet."), { x: margin, y: y - 12, size: 11, font, color: textDark });
   }
 
-  // Column geometry
+  // Column geometry: # | Proposal Item | Assigned To | Current Progress | Change
   const colNumX = margin;
-  const colNumW = 34;
+  const colNumW = 28;
   const colItemX = margin + colNumW;
-  const progCenter = 398;
-  const changeLeft = 470;
+  const assignedX = 240;
+  const progCenter = 420;
+  const changeLeft = 492;
   const changeCenter = changeLeft + (tableRight - changeLeft) / 2;
 
   let projNum = 0;
@@ -153,6 +156,7 @@ export async function generateChecklistProgressPDF(
     page.drawRectangle({ x: margin, y: y - thH, width: contentWidth, height: thH, color: navy });
     page.drawText("#", { x: colNumX + (colNumW - bold.widthOfTextAtSize("#", 8)) / 2, y: y - 12, size: 8, font: bold, color: white });
     page.drawText("PROPOSAL ITEM", { x: colItemX + 6, y: y - 12, size: 8, font: bold, color: white });
+    page.drawText("ASSIGNED TO", { x: assignedX, y: y - 12, size: 8, font: bold, color: white });
     page.drawText("CURRENT PROGRESS", { x: progCenter - bold.widthOfTextAtSize("CURRENT PROGRESS", 8) / 2, y: y - 12, size: 8, font: bold, color: white });
     page.drawText("CHANGE", { x: changeCenter - bold.widthOfTextAtSize("CHANGE", 8) / 2, y: y - 12, size: 8, font: bold, color: white });
     y -= thH;
@@ -166,7 +170,7 @@ export async function generateChecklistProgressPDF(
       const midY = y - rowH / 2;
       const textY = midY - 3;
       page.drawText(String(idx), { x: colNumX + (colNumW - font.widthOfTextAtSize(String(idx), 9)) / 2, y: textY, size: 9, font, color: textDark });
-      const itemMaxW = progCenter - 40 - (colItemX + 6);
+      const itemMaxW = assignedX - 8 - (colItemX + 6);
       // Match the Extracted Checklist section: Change Order / Add New Item rows
       // are blue; proposal-extracted rows are the normal dark text.
       const itemColor = item.isUserAdded ? rgb(29 / 255, 78 / 255, 216 / 255) : textDark;
@@ -177,6 +181,13 @@ export async function generateChecklistProgressPDF(
         font: item.isUserAdded ? bold : font,
         color: itemColor,
       });
+      // Assigned subcontractor (or a dash when unassigned)
+      const assignedMaxW = progCenter - 48 - assignedX;
+      if (item.assignedTo) {
+        page.drawText(fitText(sanitize(item.assignedTo), font, 9, assignedMaxW), { x: assignedX, y: textY, size: 9, font, color: textDark });
+      } else {
+        page.drawLine({ start: { x: assignedX, y: midY }, end: { x: assignedX + 8, y: midY }, thickness: 1.1, color: grey });
+      }
       // status dot + progress %
       const isDone = item.isCompleted || item.progress >= 100;
       const isZero = !item.isActive || item.progress <= 0;
