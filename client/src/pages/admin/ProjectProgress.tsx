@@ -6,21 +6,35 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ReportViewer } from "@/components/ReportViewer";
-import { FileText, Loader2, ChevronRight } from "lucide-react";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { FileText, Loader2, ChevronRight, RotateCcw } from "lucide-react";
+import { formatDate } from "@/lib/utils";
 import { toast } from "sonner";
 
 export default function ProjectProgress() {
   const [, navigate] = useLocation();
+  const utils = trpc.useUtils();
   const { data: projects, isLoading } = trpc.projects.weeklyActiveProjects.useQuery();
+  const { data: tracking } = trpc.projects.progressTrackingStart.useQuery();
   const generateReport = trpc.projects.generateChecklistProgressReport.useMutation();
   const [isGenerating, setIsGenerating] = useState(false);
   const [report, setReport] = useState<any>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+
+  const resetMutation = trpc.projects.resetProgressTracking.useMutation({
+    onSuccess: () => {
+      utils.projects.weeklyActiveProjects.invalidate();
+      utils.projects.progressTrackingStart.invalidate();
+      toast.success("Progress tracking reset — starting a fresh period");
+    },
+    onError: (e) => toast.error(e.message || "Failed to reset tracking"),
+  });
 
   const handleGenerate = async () => {
     setIsGenerating(true);
     try {
       const r = await generateReport.mutateAsync({});
-      setReport({ ...r, subtitle: `${r.totalProjects} projects • ${r.totalActions} actions this week` });
+      setReport({ ...r, subtitle: `${r.totalProjects} projects • ${r.totalActions} actions this period` });
     } catch (error) {
       console.error("Failed to generate report:", error);
       toast.error("Failed to generate report");
@@ -36,17 +50,29 @@ export default function ProjectProgress() {
           <div>
             <h1 className="text-2xl font-bold text-foreground">Project Progress</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Projects with checklist activity since last Wednesday
+              Projects with checklist activity{" "}
+              {tracking?.start ? `since ${formatDate(tracking.start)}` : "this period"}
             </p>
           </div>
-          <Button
-            onClick={handleGenerate}
-            disabled={isGenerating || !projects?.length}
-            className="gap-2 bg-red-600 hover:bg-red-700"
-          >
-            {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-            Generate Weekly Report
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => setConfirmReset(true)}
+              variant="outline"
+              disabled={resetMutation.isPending}
+              className="gap-2"
+            >
+              {resetMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+              Reset Tracking
+            </Button>
+            <Button
+              onClick={handleGenerate}
+              disabled={isGenerating || !projects?.length}
+              className="gap-2 bg-red-600 hover:bg-red-700"
+            >
+              {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+              Generate Weekly Report
+            </Button>
+          </div>
         </div>
 
         {isLoading ? (
@@ -57,7 +83,7 @@ export default function ProjectProgress() {
           </div>
         ) : !projects?.length ? (
           <div className="text-center py-16">
-            <p className="text-muted-foreground">No checklist activity recorded this week.</p>
+            <p className="text-muted-foreground">No checklist activity recorded this period.</p>
             <p className="text-sm text-muted-foreground/70 mt-1">
               Projects appear here once an extracted checklist item is completed or its progress changes.
             </p>
@@ -75,7 +101,7 @@ export default function ProjectProgress() {
                     <h3 className="font-semibold text-foreground truncate">{p.name}</h3>
                     <p className="text-xs text-muted-foreground mt-1">
                       {p.completedCount} of {p.totalCount} items complete · {p.actionCount} action
-                      {p.actionCount === 1 ? "" : "s"} this week
+                      {p.actionCount === 1 ? "" : "s"} this period
                     </p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
@@ -105,6 +131,18 @@ export default function ProjectProgress() {
           subtitle={report.subtitle}
         />
       )}
+
+      <ConfirmDialog
+        open={confirmReset}
+        onOpenChange={setConfirmReset}
+        title="Reset progress tracking?"
+        description="This starts a fresh tracking period from now. Projects will show no activity until a checklist item's progress or completion changes again. Item progress values themselves are not changed."
+        confirmLabel="Reset"
+        onConfirm={() => {
+          resetMutation.mutate();
+          setConfirmReset(false);
+        }}
+      />
     </CRMLayout>
   );
 }

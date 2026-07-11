@@ -409,3 +409,13 @@ export const reportSnapshots = mysqlTable("report_snapshots", {
 
 export type ReportSnapshot = typeof reportSnapshots.$inferSelect;
 export type InsertReportSnapshot = typeof reportSnapshots.$inferInsert;
+
+// ─── App Settings (simple key/value) ──────────────────────────────────────────
+// e.g. "progressTrackingStart" — start of the current manual progress period.
+export const appSettings = mysqlTable("app_settings", {
+  name: varchar("name", { length: 128 }).primaryKey(),
+  value: text("value"),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type AppSetting = typeof appSettings.$inferSelect;

@@ -33,7 +33,7 @@ import {
   weeklyReports,
 } from "../drizzle/schema";
 import { checklistActivity, type InsertChecklistActivity, type ChecklistActivity } from "../drizzle/schema";
-import { reportSnapshots } from "../drizzle/schema";
+import { reportSnapshots, appSettings } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -917,6 +917,21 @@ export async function getChecklistProgressAsOf(
     .orderBy(checklistActivity.createdAt);
   for (const r of rows) if (r.progress !== null && r.progress !== undefined) map.set(r.itemId, r.progress);
   return map;
+}
+
+/** Read a simple key/value app setting. */
+export async function getSetting(name: string): Promise<string | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(appSettings).where(eq(appSettings.name, name)).limit(1);
+  return rows[0]?.value ?? null;
+}
+
+/** Insert or update a key/value app setting. */
+export async function setSetting(name: string, value: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(appSettings).values({ name, value }).onDuplicateKeyUpdate({ set: { value } });
 }
 
 /** Progress captured for a project's items in a specific report week: itemId -> progress. */

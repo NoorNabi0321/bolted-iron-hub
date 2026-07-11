@@ -46,6 +46,8 @@ import {
   getChecklistActivityBetween,
   getChecklistProgressAsOf,
   getAllSubcontractors,
+  getSetting,
+  setSetting,
 } from "../db";
 import { protectedProcedure, router } from "../_core/trpc";
 import { generateSchedulePDF, ScheduleData, generateProjectsListPDF, ProjectsListData, ProjectsListPDFOptions } from "../_core/pdfGenerator";
@@ -115,12 +117,26 @@ function getWeekWindow(reference?: Date): { weekStart: Date; weekEnd: Date } {
   return { weekStart, weekEnd };
 }
 
+const PROGRESS_TRACKING_KEY = "progressTrackingStart";
+
+/**
+ * Start of the current progress-tracking period. Manually controlled now (the
+ * auto Wednesday roll is disabled): seeded once to the most recent Wednesday,
+ * then only the Reset button moves it forward.
+ */
+async function getTrackingStart(): Promise<Date> {
+  const stored = await getSetting(PROGRESS_TRACKING_KEY);
+  if (stored) return new Date(stored);
+  const seed = getWeekWindow().weekStart;
+  await setSetting(PROGRESS_TRACKING_KEY, seed.toISOString());
+  return seed;
+}
+
 export const projectsRouter = router({
   // Progress page: projects with checklist activity (completion/progress on
   // extracted items) since last Wednesday, with their completion %.
   weeklyActiveProjects: adminProcedure.query(async () => {
-    const { weekStart, weekEnd } = getWeekWindow();
-    const activity = await getChecklistActivityBetween(weekStart, weekEnd);
+    const activity = await getChecklistActivityBetween(await getTrackingStart(), new Date());
     const seen = new Set<number>();
     const projectIds: number[] = [];
     for (const a of activity) {
@@ -155,11 +171,24 @@ export const projectsRouter = router({
     return result;
   }),
 
+  // Progress page: current manual tracking-period start.
+  progressTrackingStart: adminProcedure.query(async () => {
+    return { start: (await getTrackingStart()).toISOString() };
+  }),
+
+  // Progress page: reset the tracking period to now (clears "this period" progress).
+  resetProgressTracking: adminProcedure.mutation(async () => {
+    await setSetting(PROGRESS_TRACKING_KEY, new Date().toISOString());
+    return { success: true };
+  }),
+
   // Progress page: weekly checklist progress report PDF (all active projects, or one).
   generateChecklistProgressReport: adminProcedure
     .input(z.object({ projectId: z.number().optional() }).optional())
     .mutation(async ({ input }) => {
-      const { weekStart, weekEnd } = getWeekWindow();
+      // Manual tracking period: from the last reset (or seed) to now.
+      const weekStart = await getTrackingStart();
+      const weekEnd = new Date();
 
       // Subcontractor id -> company name, for the "Assigned To" column.
       const subMap = new Map((await getAllSubcontractors()).map((s) => [s.id, s.companyName]));

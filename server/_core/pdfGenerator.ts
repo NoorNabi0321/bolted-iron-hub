@@ -90,7 +90,7 @@ export async function generateChecklistProgressPDF(
   y -= 26;
   page.drawText(sanitize("WEEKLY PROGRESS REPORT"), { x: margin, y: y - 14, size: 14, font: bold, color: navy });
   y -= 26;
-  page.drawText(sanitize(`Report Week: ${fmtDate(weekStart)} - ${fmtDate(weekEnd)}`), { x: margin, y: y - 10, size: 9, font: bold, color: textDark });
+  page.drawText(sanitize(`Report Period: ${fmtDate(weekStart)} - ${fmtDate(weekEnd)}`), { x: margin, y: y - 10, size: 9, font: bold, color: textDark });
   y -= 14;
   page.drawText(sanitize(`Generated: ${fmtDate(generatedAt)}`), { x: margin, y: y - 10, size: 9, font: bold, color: textDark });
   y -= 12;
