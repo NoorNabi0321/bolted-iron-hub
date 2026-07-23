@@ -137,26 +137,26 @@ export const projectsRouter = router({
   // extracted items) since last Wednesday, with their completion %.
   weeklyActiveProjects: adminProcedure.query(async () => {
     const activity = await getChecklistActivityBetween(await getTrackingStart(), new Date());
-    const seen = new Set<number>();
-    const projectIds: number[] = [];
+    const byProject = new Map<number, typeof activity>();
     for (const a of activity) {
-      if (!seen.has(a.projectId)) {
-        seen.add(a.projectId);
-        projectIds.push(a.projectId);
-      }
+      if (!byProject.has(a.projectId)) byProject.set(a.projectId, []);
+      byProject.get(a.projectId)!.push(a);
     }
     const result = [];
-    for (const pid of projectIds) {
+    for (const [pid, acts] of Array.from(byProject.entries())) {
       const project = await getProjectById(pid);
       if (!project) continue;
       const items = await getChecklistItemsForProject(pid);
+      const repairIds = new Set(items.filter((i) => i.isRepair).map((i) => i.id));
+      // Repair-item activity never surfaces a project on the Progress page.
+      const nonRepairActs = acts.filter((a) => !repairIds.has(a.itemId));
+      if (nonRepairActs.length === 0) continue;
       const extracted = items.filter((i) => i.source === "extracted" && i.isActive && !i.isRepair);
       const totalCount = extracted.length;
       const completedCount = extracted.filter((i) => i.isCompleted).length;
       const completionPercentage = totalCount
         ? Math.round(extracted.reduce((s, i) => s + (i.isCompleted ? 100 : (i.progress ?? 0)), 0) / totalCount)
         : 0;
-      const actionCount = activity.filter((a) => a.projectId === pid).length;
       result.push({
         id: project.id,
         name: project.name,
@@ -164,7 +164,7 @@ export const projectsRouter = router({
         completionPercentage,
         completedCount,
         totalCount,
-        actionCount,
+        actionCount: nonRepairActs.length,
       });
     }
     result.sort((a, b) => a.name.localeCompare(b.name));
@@ -220,8 +220,10 @@ export const projectsRouter = router({
         if (items.length === 0) continue;
 
         const affected = affectedByProject.get(project.id) ?? new Set<number>();
-        const noChange = affected.size === 0; // no checklist activity this week -> collapse
-        totalActions += affected.size;
+        // Only NON-repair item changes count (repair activity is ignored entirely).
+        const changedCount = items.filter((i) => affected.has(i.id)).length;
+        const noChange = changedCount === 0; // no non-repair activity -> collapse
+        totalActions += changedCount;
 
         // Overall progress = average across ACTIVE items (inactive don't count).
         const activeItems = items.filter((i) => i.isActive);
