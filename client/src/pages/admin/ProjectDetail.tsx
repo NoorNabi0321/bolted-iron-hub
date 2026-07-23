@@ -690,11 +690,19 @@ export default function AdminProjectDetail() {
                       <FileText className="h-4 w-4 md:h-5 md:w-5 text-red-600" />
                       <span className="truncate">Extracted Checklist & Tasks</span>
                     </CardTitle>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
                       <AddChecklistItem
                         projectId={projectId}
                         source="extracted"
                         isUserAdded
+                        maxOrder={checklistItems.reduce((m, i) => Math.max(m, i.order), 0)}
+                        onItemAdded={() => utils.projects.getChecklistItems.invalidate({ projectId })}
+                      />
+                      <AddChecklistItem
+                        projectId={projectId}
+                        source="extracted"
+                        isRepair
+                        label="Repairs"
                         maxOrder={checklistItems.reduce((m, i) => Math.max(m, i.order), 0)}
                         onItemAdded={() => utils.projects.getChecklistItems.invalidate({ projectId })}
                       />
@@ -761,6 +769,8 @@ export default function AdminProjectDetail() {
                                 ? "bg-gray-50/60 border-dashed border-gray-300"
                                 : item.isCompleted
                                 ? "bg-gray-50 border-gray-200"
+                                : item.isRepair
+                                ? "bg-green-50/50 border-green-200"
                                 : item.isUserAdded
                                 ? "bg-blue-50/40 border-blue-200"
                                 : "bg-white border-gray-200 hover:border-gray-300"
@@ -906,6 +916,8 @@ export default function AdminProjectDetail() {
                                   } ${
                                     item.isCompleted
                                       ? "line-through text-gray-400"
+                                      : item.isRepair
+                                      ? "text-green-700 font-medium"
                                       : item.isUserAdded
                                       ? "text-blue-700 font-medium"
                                       : "text-gray-900"

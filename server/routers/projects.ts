@@ -150,7 +150,7 @@ export const projectsRouter = router({
       const project = await getProjectById(pid);
       if (!project) continue;
       const items = await getChecklistItemsForProject(pid);
-      const extracted = items.filter((i) => i.source === "extracted" && i.isActive);
+      const extracted = items.filter((i) => i.source === "extracted" && i.isActive && !i.isRepair);
       const totalCount = extracted.length;
       const completedCount = extracted.filter((i) => i.isCompleted).length;
       const completionPercentage = totalCount
@@ -215,7 +215,7 @@ export const projectsRouter = router({
       for (const project of projectList) {
         // Full proposal checklist for this project — active AND inactive.
         const items = (await getChecklistItemsForProject(project.id))
-          .filter((i) => i.source === "extracted")
+          .filter((i) => i.source === "extracted" && !i.isRepair)
           .sort((a, b) => a.order - b.order);
         if (items.length === 0) continue;
 
@@ -534,6 +534,7 @@ export const projectsRouter = router({
         source: z.enum(["manual", "extracted"]).optional().default("manual"),
         isActive: z.boolean().optional(),
         isUserAdded: z.boolean().optional(),
+        isRepair: z.boolean().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -545,6 +546,7 @@ export const projectsRouter = router({
         source: input.source,
         isActive: input.isActive ?? true,
         isUserAdded: input.isUserAdded ?? false,
+        isRepair: input.isRepair ?? false,
       });
       await touchProject(input.projectId);
       return id;
@@ -621,7 +623,7 @@ export const projectsRouter = router({
       const before = await getChecklistItemById(itemId);
       await updateChecklistItem(itemId, patch);
 
-      if (before && before.source === 'extracted') {
+      if (before && before.source === 'extracted' && !before.isRepair) {
         if (patch.progress !== undefined && patch.progress !== before.progress) {
           await logChecklistActivity({
             projectId,

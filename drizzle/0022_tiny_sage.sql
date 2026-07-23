@@ -1,0 +1,1 @@
+ALTER TABLE `project_checklist_items` ADD `isRepair` boolean DEFAULT false NOT NULL;

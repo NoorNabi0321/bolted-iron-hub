@@ -19,8 +19,10 @@ interface AddChecklistItemProps {
   onItemAdded?: () => void;
   /** Which list the new item belongs to. Defaults to the manual checklist. */
   source?: "manual" | "extracted";
-  /** Mark the new item as user-added (shown green + active). */
+  /** Mark the new item as user-added (shown blue + active). */
   isUserAdded?: boolean;
+  /** Mark the new item as a repair item (shown green + active, hidden from Progress). */
+  isRepair?: boolean;
   /** Custom trigger button label. */
   label?: string;
 }
@@ -31,6 +33,7 @@ export function AddChecklistItem({
   onItemAdded,
   source = "manual",
   isUserAdded = false,
+  isRepair = false,
   label,
 }: AddChecklistItemProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -61,7 +64,8 @@ export function AddChecklistItem({
       isCompleted: false,
       source,
       isActive: true,
-      isUserAdded,
+      isUserAdded: isRepair ? true : isUserAdded,
+      isRepair,
     });
   };
 
@@ -81,16 +85,18 @@ export function AddChecklistItem({
         className="gap-1 md:gap-2 px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm flex-shrink-0"
       >
         <Plus className="w-3 h-3 md:w-4 md:h-4" />
-        <span className="hidden md:inline">Add Item</span>
-        <span className="md:hidden">Add</span>
+        <span className="hidden md:inline">{label ?? "Add Item"}</span>
+        <span className="md:hidden">{label ?? "Add"}</span>
       </Button>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add Checklist Item</DialogTitle>
+            <DialogTitle>{isRepair ? "Add Repair Item" : "Add Checklist Item"}</DialogTitle>
             <DialogDescription>
-              Enter a new item to add to the project checklist
+              {isRepair
+                ? "Enter a repair item. It appears green and is excluded from the Progress page."
+                : "Enter a new item to add to the project checklist"}
             </DialogDescription>
           </DialogHeader>
 

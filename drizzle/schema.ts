@@ -240,6 +240,8 @@ export const projectChecklistItems = mysqlTable("project_checklist_items", {
   isActive: boolean("isActive").default(true).notNull(),
   /** True for items added by hand or via an approved change order (shown green). */
   isUserAdded: boolean("isUserAdded").default(false).notNull(),
+  /** True for repair items (shown green, excluded from the Progress page/report). */
+  isRepair: boolean("isRepair").default(false).notNull(),
   order: int("order").notNull(),
   source: mysqlEnum("source", ["manual", "extracted"]).default("manual").notNull(),
   assignedSubcontractorId: int("assignedSubcontractorId"),

@@ -20,8 +20,10 @@ export default function ProjectProgressDetail() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [report, setReport] = useState<any>(null);
 
-  // Only active items count toward progress.
-  const items = allItems.filter((i) => (i as { isActive?: boolean }).isActive);
+  // Only active, non-repair items count toward progress.
+  const items = allItems.filter(
+    (i) => (i as { isActive?: boolean }).isActive && !(i as { isRepair?: boolean }).isRepair
+  );
   const totalCount = items.length;
   const completedCount = items.filter((i) => i.isCompleted).length;
   const completionPercentage = totalCount
