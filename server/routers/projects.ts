@@ -209,6 +209,8 @@ export const projectsRouter = router({
       } else {
         projectList = await getAllProjects({ isArchived: false, includeInspectionPassed: true });
       }
+      // Projects in Review status never appear in any PDF report.
+      projectList = projectList.filter((p) => p.status !== "Review");
 
       const projectsData = [];
       let totalActions = 0;
@@ -822,12 +824,12 @@ export const projectsRouter = router({
         subcontractorIds: input.subcontractorIds,
       });
       
-      // Fetch all active projects
-      let allProjects = await getAllProjects({
+      // Fetch all active projects (Review-status projects are excluded from the PDF)
+      let allProjects = (await getAllProjects({
         isArchived: false,
         includeInspectionPassed: false,
-      });
-      
+      })).filter((p) => p.status !== "Review");
+
       console.log('[PDF Export] Total projects fetched:', allProjects.length);
 
       // Helper functions (same as frontend DailySchedule.tsx)
@@ -1013,7 +1015,10 @@ export const projectsRouter = router({
       });
 
       if (!projects) projects = [];
-      
+
+      // Projects in Review status never appear in any PDF report.
+      projects = projects.filter((p) => p.status !== "Review");
+
       if (input?.projectIds && Array.isArray(input.projectIds) && input.projectIds.length > 0) {
         projects = projects.filter((p) => input.projectIds!.includes(p.id));
       }
