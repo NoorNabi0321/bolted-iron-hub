@@ -877,18 +877,15 @@ export const projectsRouter = router({
           if (end) {
             // If both start and end dates exist, show on all days in range
             shouldAppear = isWithinRange(day, start, end);
+          } else if (p.status === 'Review') {
+            // No end date + Review: hide (Inspection Passed is excluded above).
+            shouldAppear = false;
           } else {
-            // If only start date exists, behavior depends on project status
-            // Shop Drawings and Review statuses: show ONLY on start date
-            // Other statuses: show from start date onwards
-            if (p.status === 'Shop Drawings' || p.status === 'Review') {
-              shouldAppear = isSameDay(day, start);
-            } else {
-              // For other statuses (Fabrication, On-Site, etc.), show from start date onwards
-              const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
-              const rangeStart = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-              shouldAppear = dayStart >= rangeStart;
-            }
+            // No estimated end date: show every day from the start date onwards,
+            // until the project moves to Inspection Passed or Review.
+            const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+            const rangeStart = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+            shouldAppear = dayStart >= rangeStart;
           }
           
           if (!shouldAppear) return false;
