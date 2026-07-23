@@ -193,12 +193,22 @@ export const projectsRouter = router({
       // Subcontractor id -> company name, for the "Assigned To" column.
       const subMap = new Map((await getAllSubcontractors()).map((s) => [s.id, s.companyName]));
 
-      // Which items were touched this week (since last Wednesday), per project.
-      const weekActivity = await getChecklistActivityBetween(weekStart, weekEnd, input?.projectId);
-      const affectedByProject = new Map<number, Set<number>>();
-      for (const a of weekActivity) {
-        if (!affectedByProject.has(a.projectId)) affectedByProject.set(a.projectId, new Set());
-        affectedByProject.get(a.projectId)!.add(a.itemId);
+      // Activity this period, plus a rolling 2-week window used to drop projects
+      // that have been idle for 2+ weeks (they return once an item changes again).
+      const twoWeeksAgo = new Date(weekEnd.getTime() - 14 * 24 * 60 * 60 * 1000);
+      const windowStart = twoWeeksAgo < weekStart ? twoWeeksAgo : weekStart;
+      const windowActivity = await getChecklistActivityBetween(windowStart, weekEnd, input?.projectId);
+      const affectedByProject = new Map<number, Set<number>>(); // changed this period
+      const recentByProject = new Map<number, Set<number>>(); // changed within the last 2 weeks
+      for (const a of windowActivity) {
+        if (a.createdAt >= weekStart) {
+          if (!affectedByProject.has(a.projectId)) affectedByProject.set(a.projectId, new Set());
+          affectedByProject.get(a.projectId)!.add(a.itemId);
+        }
+        if (a.createdAt >= twoWeeksAgo) {
+          if (!recentByProject.has(a.projectId)) recentByProject.set(a.projectId, new Set());
+          recentByProject.get(a.projectId)!.add(a.itemId);
+        }
       }
 
       // One project, or every non-archived project (including Inspection Passed).
@@ -222,9 +232,13 @@ export const projectsRouter = router({
         if (items.length === 0) continue;
 
         const affected = affectedByProject.get(project.id) ?? new Set<number>();
+        const recent = recentByProject.get(project.id) ?? new Set<number>();
         // Only NON-repair item changes count (repair activity is ignored entirely).
         const changedCount = items.filter((i) => affected.has(i.id)).length;
-        const noChange = changedCount === 0; // no non-repair activity -> collapse
+        const hasRecentActivity = items.some((i) => recent.has(i.id));
+        // Idle for 2+ weeks (no non-repair activity) -> leave off the report entirely.
+        if (changedCount === 0 && !hasRecentActivity) continue;
+        const noChange = changedCount === 0; // no change this period -> "No Change This Week"
         totalActions += changedCount;
 
         // Overall progress = average across ACTIVE items (inactive don't count).
