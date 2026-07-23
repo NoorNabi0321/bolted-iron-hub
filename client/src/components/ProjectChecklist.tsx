@@ -52,7 +52,7 @@ export function ProjectChecklist({ projectId, source = "manual" }: ProjectCheckl
             <FileText className="h-4 w-4 md:h-5 md:w-5 text-red-600" />
             <span className="truncate">Checklist & Tasks</span>
           </CardTitle>
-          {isAdmin && <AddChecklistItem projectId={projectId} maxOrder={maxOrder} onItemAdded={handleItemsChange} />}
+          {isAdmin && <AddChecklistItem projectId={projectId} maxOrder={maxOrder} withQuantity onItemAdded={handleItemsChange} />}
         </div>
       </CardHeader>
 

@@ -23,6 +23,8 @@ interface AddChecklistItemProps {
   isUserAdded?: boolean;
   /** Mark the new item as a repair item (shown green + active, hidden from Progress). */
   isRepair?: boolean;
+  /** Show a Quantity field; the value is appended to the item text. */
+  withQuantity?: boolean;
   /** Custom trigger button label. */
   label?: string;
 }
@@ -34,15 +36,18 @@ export function AddChecklistItem({
   source = "manual",
   isUserAdded = false,
   isRepair = false,
+  withQuantity = false,
   label,
 }: AddChecklistItemProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [itemText, setItemText] = useState("");
+  const [quantity, setQuantity] = useState("");
 
   const createItemMutation = trpc.projects.createChecklistItem.useMutation({
     onSuccess: () => {
       toast.success("Item added to checklist");
       setItemText("");
+      setQuantity("");
       setIsOpen(false);
       onItemAdded?.();
     },
@@ -57,9 +62,14 @@ export function AddChecklistItem({
       return;
     }
 
+    const text =
+      withQuantity && quantity.trim()
+        ? `${itemText.trim()} — Qty: ${quantity.trim()}`
+        : itemText.trim();
+
     await createItemMutation.mutateAsync({
       projectId,
-      text: itemText.trim(),
+      text,
       order: maxOrder + 1,
       isCompleted: false,
       source,
@@ -100,7 +110,7 @@ export function AddChecklistItem({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             <Input
               placeholder="Enter item description..."
               value={itemText}
@@ -110,6 +120,16 @@ export function AddChecklistItem({
               autoFocus
               className="min-h-10"
             />
+            {withQuantity && (
+              <Input
+                placeholder="Quantity (optional)"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={createItemMutation.isPending}
+                className="min-h-10"
+              />
+            )}
           </div>
 
           <DialogFooter>
