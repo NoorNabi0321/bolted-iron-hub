@@ -283,7 +283,12 @@ export const projectsRouter = router({
           items: reportItems,
         });
       }
-      projectsData.sort((a, b) => a.name.localeCompare(b.name));
+      // Updated-this-period projects first, then the "No Change This Week" ones;
+      // alphabetical within each group.
+      projectsData.sort((a, b) => {
+        if (a.noChange !== b.noChange) return a.noChange ? 1 : -1;
+        return a.name.localeCompare(b.name);
+      });
 
       const { generateChecklistProgressPDF } = await import("../_core/pdfGenerator");
       const pdfBuffer = await generateChecklistProgressPDF({
