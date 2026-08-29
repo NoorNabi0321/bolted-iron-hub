@@ -422,3 +422,17 @@ export const appSettings = mysqlTable("app_settings", {
 });
 
 export type AppSetting = typeof appSettings.$inferSelect;
+
+// ─── Daily Schedule Combinations ──────────────────────────────────────────────
+// A group of projects merged into one card for a single day on the schedule.
+export const scheduleCombinations = mysqlTable("schedule_combinations", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Day the combination applies to, as YYYY-MM-DD. */
+  day: varchar("day", { length: 10 }).notNull(),
+  /** JSON array of project ids in this group. */
+  projectIds: text("projectIds").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ScheduleCombination = typeof scheduleCombinations.$inferSelect;

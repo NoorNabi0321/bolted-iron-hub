@@ -49,6 +49,9 @@ import {
   getSetting,
   setSetting,
   getProjectIdsWithUnfinishedItems,
+  getScheduleCombinations,
+  combineProjectsOnDay,
+  uncombineProjectOnDay,
 } from "../db";
 import { protectedProcedure, router } from "../_core/trpc";
 import { generateSchedulePDF, ScheduleData, generateProjectsListPDF, ProjectsListData, ProjectsListPDFOptions } from "../_core/pdfGenerator";
@@ -171,6 +174,25 @@ export const projectsRouter = router({
     result.sort((a, b) => a.name.localeCompare(b.name));
     return result;
   }),
+
+  // Weekly Schedule: daily project combinations (merged cards).
+  scheduleCombinations: adminProcedure.query(async () => {
+    return getScheduleCombinations();
+  }),
+
+  combineProjects: adminProcedure
+    .input(z.object({ day: z.string(), sourceId: z.number(), targetId: z.number() }))
+    .mutation(async ({ input }) => {
+      await combineProjectsOnDay(input.day, input.sourceId, input.targetId);
+      return { success: true };
+    }),
+
+  uncombineProject: adminProcedure
+    .input(z.object({ day: z.string(), projectId: z.number() }))
+    .mutation(async ({ input }) => {
+      await uncombineProjectOnDay(input.day, input.projectId);
+      return { success: true };
+    }),
 
   // Progress page: current manual tracking-period start.
   progressTrackingStart: adminProcedure.query(async () => {
@@ -861,6 +883,16 @@ export const projectsRouter = router({
         includeInspectionPassed: false,
       })).filter((p) => p.status !== "Review");
 
+      // Daily combinations -> merge grouped jobs into one PDF entry per day.
+      const scheduleCombos = await getScheduleCombinations();
+      const tzOffset = input.timezoneOffset ?? 0;
+      const dayKeyOf = (d: Date) => new Date(d.getTime() - tzOffset * 60000).toISOString().slice(0, 10);
+      const combosByDayKey = new Map<string, number[][]>();
+      for (const c of scheduleCombos) {
+        if (!combosByDayKey.has(c.day)) combosByDayKey.set(c.day, []);
+        combosByDayKey.get(c.day)!.push(c.projectIds);
+      }
+
       console.log('[PDF Export] Total projects fetched:', allProjects.length);
 
       // Helper functions (same as frontend DailySchedule.tsx)
@@ -980,19 +1012,40 @@ export const projectsRouter = router({
           
           console.log(`[PDF Export] Day ${dayName} (${day.toISOString().split('T')[0]}): ${dayProjects.length} projects`);
           
+          // Merge combined groups (>=2 members scheduled this day) into one entry.
+          const dk = dayKeyOf(day);
+          const groups = (combosByDayKey.get(dk) ?? [])
+            .map((ids) => dayProjects.filter((p) => ids.includes(p.id)))
+            .filter((g) => g.length >= 2);
+          const comboIds = new Set(groups.flatMap((g) => g.map((p) => p.id)));
+          const pdfProjects = [
+            ...groups.map((g) => ({
+              id: g.map((p) => p.id).join("-"),
+              name: g.map((p) => p.name).join(" + "),
+              status: g[0].status as string,
+              address: g[0].address ?? "",
+              isUrgent: g.some((p) => Boolean((p as any).isUrgent)),
+              startTime: g[0].startTime,
+              estimatedEndTime: g[0].estimatedEndTime,
+              subcontractors: [] as { id: string; companyName: string }[],
+            })),
+            ...dayProjects
+              .filter((p) => !comboIds.has(p.id))
+              .map((p) => ({
+                id: p.id.toString(),
+                name: p.name,
+                status: p.status as string,
+                address: p.address ?? "",
+                isUrgent: Boolean((p as any).isUrgent),
+                startTime: p.startTime,
+                estimatedEndTime: p.estimatedEndTime,
+                subcontractors: [] as { id: string; companyName: string }[],
+              })),
+          ];
           scheduleDataArray.push({
             date: day,
             dayName,
-            projects: dayProjects.map((p) => ({
-              id: p.id.toString(),
-              name: p.name,
-              status: p.status,
-              address: p.address,
-              isUrgent: (p as any).isUrgent || false,
-              startTime: p.startTime,
-              estimatedEndTime: p.estimatedEndTime,
-              subcontractors: [],
-            })),
+            projects: pdfProjects,
           });
         }
       }

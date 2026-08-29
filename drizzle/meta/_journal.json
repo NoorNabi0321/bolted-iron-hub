@@ -169,6 +169,13 @@
       "when": 1787985059772,
       "tag": "0023_plain_vulcan",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1787989113065,
+      "tag": "0024_deep_magik",
+      "breakpoints": true
     }
   ]
 }

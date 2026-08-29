@@ -33,7 +33,80 @@ import {
   weeklyReports,
 } from "../drizzle/schema";
 import { checklistActivity, type InsertChecklistActivity, type ChecklistActivity } from "../drizzle/schema";
-import { reportSnapshots, appSettings } from "../drizzle/schema";
+import { reportSnapshots, appSettings, scheduleCombinations } from "../drizzle/schema";
+
+export interface DayCombination {
+  id: number;
+  day: string;
+  projectIds: number[];
+}
+
+function parseIdList(s: string): number[] {
+  try {
+    const a = JSON.parse(s);
+    return Array.isArray(a) ? a.filter((x) => typeof x === "number") : [];
+  } catch {
+    return [];
+  }
+}
+
+/** All schedule combinations (each is a group of projects merged for one day). */
+export async function getScheduleCombinations(): Promise<DayCombination[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(scheduleCombinations);
+  return rows.map((r) => ({ id: r.id, day: r.day, projectIds: parseIdList(r.projectIds) }));
+}
+
+/** Merge `sourceId` into the group that contains `targetId` on `day` (creating one if needed). */
+export async function combineProjectsOnDay(day: string, sourceId: number, targetId: number): Promise<void> {
+  const db = await getDb();
+  if (!db || sourceId === targetId) return;
+  const rows = await db.select().from(scheduleCombinations).where(eq(scheduleCombinations.day, day));
+  const groups = rows.map((r) => ({ id: r.id, ids: parseIdList(r.projectIds) }));
+
+  // Remove the dragged project from any group it is already in.
+  for (const g of groups) g.ids = g.ids.filter((x) => x !== sourceId);
+
+  const targetGroup = groups.find((g) => g.ids.includes(targetId));
+  if (targetGroup) {
+    targetGroup.ids.push(sourceId);
+  } else {
+    await db.insert(scheduleCombinations).values({ day, projectIds: JSON.stringify([targetId, sourceId]) });
+  }
+
+  // Persist existing groups; dissolve any that dropped below 2 members.
+  for (const g of groups) {
+    if (g.ids.length < 2) {
+      await db.delete(scheduleCombinations).where(eq(scheduleCombinations.id, g.id));
+    } else {
+      await db
+        .update(scheduleCombinations)
+        .set({ projectIds: JSON.stringify(g.ids) })
+        .where(eq(scheduleCombinations.id, g.id));
+    }
+  }
+}
+
+/** Remove a project from its combination on `day` (dissolving groups under 2 members). */
+export async function uncombineProjectOnDay(day: string, projectId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const rows = await db.select().from(scheduleCombinations).where(eq(scheduleCombinations.day, day));
+  for (const r of rows) {
+    const ids = parseIdList(r.projectIds);
+    if (!ids.includes(projectId)) continue;
+    const rest = ids.filter((x) => x !== projectId);
+    if (rest.length < 2) {
+      await db.delete(scheduleCombinations).where(eq(scheduleCombinations.id, r.id));
+    } else {
+      await db
+        .update(scheduleCombinations)
+        .set({ projectIds: JSON.stringify(rest) })
+        .where(eq(scheduleCombinations.id, r.id));
+    }
+  }
+}
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;

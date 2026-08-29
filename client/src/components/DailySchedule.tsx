@@ -1,11 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/StatusBadge";
-import { Calendar, ChevronLeft, ChevronRight, Clock, MapPin, X, FileDown, Mail, MessageCircle, Star } from "lucide-react";
-import { useState, useMemo, useEffect } from "react";
+import { Calendar, ChevronLeft, ChevronRight, Clock, MapPin, X, FileDown, Mail, MessageCircle, Star, Layers, Link2Off } from "lucide-react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { StatusFilterDropdown } from "@/components/StatusFilterDropdown";
 import { SubcontractorFilterDropdown } from "@/components/SubcontractorFilterDropdown";
 
@@ -99,6 +100,54 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
     { enabled: unfinishedOnly }
   );
   const scheduleProjects = (unfinishedOnly ? unfinishedProjects : projects) as typeof projects;
+
+  // ── Daily combinations (drag/long-press a job onto another to merge for a day) ──
+  const { data: combinations = [] } = trpc.projects.scheduleCombinations.useQuery();
+  const combineMutation = trpc.projects.combineProjects.useMutation({
+    onSuccess: () => utils.projects.scheduleCombinations.invalidate(),
+    onError: (e) => toast.error(e.message || "Failed to combine jobs"),
+  });
+  const uncombineMutation = trpc.projects.uncombineProject.useMutation({
+    onSuccess: () => utils.projects.scheduleCombinations.invalidate(),
+  });
+  const [armed, setArmed] = useState<{ id: number; day: string } | null>(null);
+  const [comboDialog, setComboDialog] = useState<{ day: string; projects: { id: number; name: string }[] } | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const dayKey = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${dd}`;
+  };
+
+  const combosByDay = useMemo(() => {
+    const map = new Map<string, number[][]>();
+    for (const c of combinations) {
+      if (!map.has(c.day)) map.set(c.day, []);
+      map.get(c.day)!.push(c.projectIds);
+    }
+    return map;
+  }, [combinations]);
+
+  const doCombine = (day: string, sourceId: number, targetId: number) => {
+    setArmed(null);
+    if (sourceId !== targetId) combineMutation.mutate({ day, sourceId, targetId });
+  };
+
+  const startArm = (id: number, day: string) => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    longPressTimer.current = setTimeout(() => {
+      setArmed({ id, day });
+      try { (navigator as any).vibrate?.(25); } catch {}
+    }, 400);
+  };
+  const cancelArm = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
 
   const subsMap = useMemo(() => {
     const map = new Map<number, string>();
@@ -432,6 +481,12 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
             const dayLabel = formatDayLabel(day);
             const weekday = day.toLocaleDateString("en-US", { weekday: "short" });
             const dateNum = day.getDate();
+            const dk = dayKey(day);
+            // Groups that have >= 2 members actually scheduled this day render as one card.
+            const effGroups = (combosByDay.get(dk) ?? [])
+              .map((ids) => ids.filter((id) => dayProjects.some((p) => p.id === id)))
+              .filter((ids) => ids.length >= 2);
+            const comboMemberIds = new Set(effGroups.flat());
 
             // Hide empty days when filters are applied
             const hasActiveFilters = selectedDate || selectedSubIds.length > 0 || selectedStatuses.length > 0 || unfinishedOnly;
@@ -476,15 +531,71 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
                       </p>
                     ) : (
                       <div className="space-y-1.5">
-                        {dayProjects.map((project) => (
+                        {armed && armed.day === dk && (
+                          <p className="text-[10px] text-red-600 font-medium px-1">
+                            Tap another job to combine, or tap the highlighted job to cancel.
+                          </p>
+                        )}
+                        {effGroups.map((ids, gi) => {
+                          const members = dayProjects.filter((p) => ids.includes(p.id));
+                          return (
+                            <div
+                              key={`combo-${gi}`}
+                              onClick={() => setComboDialog({ day: dk, projects: members.map((m) => ({ id: m.id, name: m.name })) })}
+                              onDragOver={(e) => e.preventDefault()}
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                try {
+                                  const d = JSON.parse(e.dataTransfer.getData("text/plain"));
+                                  if (d && d.day === dk) doCombine(dk, d.id, members[0].id);
+                                } catch {}
+                              }}
+                              className="flex items-center gap-2 p-1.5 sm:p-2 rounded-md cursor-pointer bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors"
+                            >
+                              <Layers className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs sm:text-sm font-medium text-indigo-900 truncate">
+                                  {members.map((m) => m.name).join("  +  ")}
+                                </p>
+                                <p className="text-[10px] sm:text-xs text-indigo-600 mt-0.5">
+                                  {members.length} jobs combined — tap to open one
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {dayProjects.filter((p) => !comboMemberIds.has(p.id)).map((project) => (
                           <div
                             key={project.id}
+                            data-project-id={project.id}
+                            data-day={dk}
+                            draggable
+                            onDragStart={(e) => e.dataTransfer.setData("text/plain", JSON.stringify({ id: project.id, day: dk }))}
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              try {
+                                const d = JSON.parse(e.dataTransfer.getData("text/plain"));
+                                if (d && d.day === dk) doCombine(dk, d.id, project.id);
+                              } catch {}
+                            }}
+                            onPointerDown={() => startArm(project.id, dk)}
+                            onPointerMove={cancelArm}
+                            onPointerUp={cancelArm}
+                            onPointerLeave={cancelArm}
                             onClick={(e) => {
-                              // Don't navigate if clicking on status badge
                               if ((e.target as HTMLElement).closest('button')) return;
+                              if (armed && armed.day === dk && armed.id !== project.id) { doCombine(dk, armed.id, project.id); return; }
+                              if (armed && armed.id === project.id) { setArmed(null); return; }
                               setLocation(`/projects/${project.id}`);
                             }}
-                            className={`flex items-center gap-2 sm:gap-3 p-1.5 sm:p-2 rounded-md cursor-pointer transition-colors group ${
+                            className={`flex items-center gap-2 sm:gap-3 p-1.5 sm:p-2 rounded-md cursor-pointer transition-colors group select-none ${
+                              armed?.id === project.id
+                                ? "ring-2 ring-red-500 bg-red-50"
+                                : armed?.day === dk
+                                ? "ring-1 ring-red-200"
+                                : ""
+                            } ${
                               project.isUrgent
                                 ? "bg-yellow-50 hover:bg-yellow-100"
                                 : "hover:bg-accent/50"
@@ -533,6 +644,45 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
           })}
         </div>
       </CardContent>
+
+      {/* Combined-jobs chooser */}
+      <Dialog open={!!comboDialog} onOpenChange={(o) => !o && setComboDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Combined jobs</DialogTitle>
+            <DialogDescription>Which job would you like to open?</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {comboDialog?.projects.map((p) => (
+              <div key={p.id} className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 justify-start"
+                  onClick={() => {
+                    setComboDialog(null);
+                    setLocation(`/projects/${p.id}`);
+                  }}
+                >
+                  {p.name}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  title="Remove this job from the combination"
+                  onClick={() => {
+                    if (!comboDialog) return;
+                    uncombineMutation.mutate({ day: comboDialog.day, projectId: p.id });
+                    const remaining = comboDialog.projects.filter((x) => x.id !== p.id);
+                    setComboDialog(remaining.length >= 2 ? { ...comboDialog, projects: remaining } : null);
+                  }}
+                >
+                  <Link2Off className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* PDF Preview Dialog */}
       <Dialog open={showPDFDialog} onOpenChange={setShowPDFDialog}>
