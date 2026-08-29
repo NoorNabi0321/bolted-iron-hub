@@ -78,9 +78,10 @@ export function dateToTimestamp(dateString: string): number | undefined {
   return date.getTime();
 }
 
-export function timestampToDateInput(timestamp: number | null | undefined): string {
+export function timestampToDateInput(timestamp: number | string | Date | null | undefined): string {
   if (!timestamp) return "";
-  // Convert timestamp to local date string in YYYY-MM-DD format
+  // Convert to a LOCAL YYYY-MM-DD string (matches how dates are displayed);
+  // using toISOString here would shift a day across timezones.
   const date = new Date(timestamp);
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");

@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
-import { formatDate, formatTime, PROJECT_STATUSES, sortProjectsForList } from "@/lib/utils";
+import { formatDate, formatTime, PROJECT_STATUSES, sortProjectsForList, timestampToDateInput, dateToTimestamp } from "@/lib/utils";
 import { Calendar, FolderOpen, List, Plus, Search, X, Trash2, FileDown, Mail, MessageCircle, Star } from "lucide-react";
 import { useState, useEffect } from "react";
 import React from "react";
@@ -644,14 +644,10 @@ export default function AdminProjects() {
                     id="date-input"
                     defaultValue={
                       dateOverrides[editingDateField.projectId]?.[editingDateField.field]
-                        ? new Date(dateOverrides[editingDateField.projectId]?.[editingDateField.field]!).toISOString().split('T')[0]
+                        ? timestampToDateInput(dateOverrides[editingDateField.projectId]?.[editingDateField.field]!)
                         : editingDateField.field === 'startDate'
-                        ? projects.find(p => p.id === editingDateField.projectId)?.startDate
-                          ? new Date(projects.find(p => p.id === editingDateField.projectId)!.startDate!).toISOString().split('T')[0]
-                          : ''
-                        : projects.find(p => p.id === editingDateField.projectId)?.estimatedEndDate
-                        ? new Date(projects.find(p => p.id === editingDateField.projectId)!.estimatedEndDate!).toISOString().split('T')[0]
-                        : ''
+                        ? timestampToDateInput(projects.find(p => p.id === editingDateField.projectId)?.startDate)
+                        : timestampToDateInput(projects.find(p => p.id === editingDateField.projectId)?.estimatedEndDate)
                     }
                     className="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
                   />
@@ -669,7 +665,9 @@ export default function AdminProjects() {
                     const project = projects.find(p => p.id === editingDateField.projectId);
                     const dateInput = document.getElementById('date-input') as HTMLInputElement;
                     if (project && dateInput?.value) {
-                      const newDate = new Date(dateInput.value).getTime();
+                      // Parse the YYYY-MM-DD as LOCAL midnight (matches display); using
+                      // new Date(str) would treat it as UTC and shift a day.
+                      const newDate = dateToTimestamp(dateInput.value)!;
                       updateMutation.mutate({
                         id: editingDateField.projectId,
                         data: {
