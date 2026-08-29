@@ -92,6 +92,14 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
   const [statusOverrides, setStatusOverrides] = useState<Record<number, string>>({});
   const exportPDFMutation = trpc.projects.exportSchedulePDF.useMutation();
 
+  // "Unfinished items" filter: jobs with any open checklist item, incl. passed inspection.
+  const [unfinishedOnly, setUnfinishedOnly] = useState(false);
+  const { data: unfinishedProjects = [] } = trpc.projects.list.useQuery(
+    { unfinishedOnly: true },
+    { enabled: unfinishedOnly }
+  );
+  const scheduleProjects = (unfinishedOnly ? unfinishedProjects : projects) as typeof projects;
+
   const subsMap = useMemo(() => {
     const map = new Map<number, string>();
     subcontractors.forEach((s) => map.set(s.id, s.companyName));
@@ -103,10 +111,10 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
     let cancelled = false;
     
     const fetchAllAssignments = async () => {
-      if (projects.length === 0) return;
-      
+      if (scheduleProjects.length === 0) return;
+
       const assignments: Record<number, ProjectAssignment[]> = {};
-      const promises = projects.map(async (project) => {
+      const promises = scheduleProjects.map(async (project) => {
         try {
           const result = await utils.projects.getAssignments.fetch({ projectId: project.id });
           if (!cancelled) {
@@ -130,7 +138,7 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
     return () => {
       cancelled = true;
     };
-  }, [projects.map(p => p.id).join(','), utils]);
+  }, [scheduleProjects.map(p => p.id).join(','), utils]);
 
   // Generate 7 days starting from today + weekOffset
   const days = useMemo(() => {
@@ -147,33 +155,45 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
 
   // Get projects scheduled for a specific day with filters applied
   const getProjectsForDay = (day: Date) => {
-    return projects.filter((p) => {
-      // Auto-remove projects with 'Inspection Passed' status
-      if (p.status === 'Inspection Passed') return false;
+    return scheduleProjects.filter((p) => {
+      // Auto-remove 'Inspection Passed' — unless the Unfinished-items filter is on,
+      // which is meant to surface passed jobs that still have open items.
+      if (!unfinishedOnly && p.status === 'Inspection Passed') return false;
       
       const start = toDate(p.startDate);
       const end = toDate(p.estimatedEndDate);
-      
-      // Project must have a start date
-      if (!start) return false;
-      
-      // Determine if project should appear on this day
+
       let shouldAppear = false;
-      
-      if (end) {
-        // If both start and end dates exist, show on all days in range
-        shouldAppear = isWithinRange(day, start, end);
-      } else if (p.status === "Review") {
-        // No end date + Review: hide (Inspection Passed is already excluded above).
-        shouldAppear = false;
+
+      if (unfinishedOnly) {
+        // Surface every unfinished job across the week: from its start date onwards
+        // (ignoring end date so passed jobs still show), or on all days if no start.
+        if (!start) {
+          shouldAppear = true;
+        } else {
+          const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+          const rangeStart = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+          shouldAppear = dayStart >= rangeStart;
+        }
       } else {
-        // No estimated end date: show every day from the start date onwards,
-        // until the project moves to Inspection Passed or Review.
-        const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
-        const rangeStart = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-        shouldAppear = dayStart >= rangeStart;
+        // Project must have a start date
+        if (!start) return false;
+
+        if (end) {
+          // If both start and end dates exist, show on all days in range
+          shouldAppear = isWithinRange(day, start, end);
+        } else if (p.status === "Review") {
+          // No end date + Review: hide (Inspection Passed is already excluded above).
+          shouldAppear = false;
+        } else {
+          // No estimated end date: show every day from the start date onwards,
+          // until the project moves to Inspection Passed or Review.
+          const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+          const rangeStart = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+          shouldAppear = dayStart >= rangeStart;
+        }
       }
-      
+
       if (!shouldAppear) return false;
       
       // Apply date filter
@@ -196,7 +216,7 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
 
   // Get all unique statuses from projects
   const allStatuses = useMemo(() => {
-    const statuses = new Set(projects.map(p => p.status));
+    const statuses = new Set(scheduleProjects.map(p => p.status));
     return Array.from(statuses).sort();
   }, [projects]);
 
@@ -375,13 +395,25 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
             />
           </div>
 
+          {/* Unfinished-items filter */}
+          <button
+            onClick={() => setUnfinishedOnly((v) => !v)}
+            className={`px-2 py-1 text-xs rounded border transition-colors flex items-center gap-1 ${
+              unfinishedOnly ? "bg-amber-600 text-white border-amber-600" : "border-border hover:bg-accent"
+            }`}
+            title="Jobs with open (unfinished) checklist items — including passed inspection"
+          >
+            Unfinished items
+          </button>
+
           {/* Clear filters button */}
-          {(selectedDate || selectedSubIds.length > 0 || selectedStatuses.length > 0) && (
+          {(selectedDate || selectedSubIds.length > 0 || selectedStatuses.length > 0 || unfinishedOnly) && (
             <button
               onClick={() => {
                 setSelectedDate(null);
                 setSelectedSubIds([]);
                 setSelectedStatuses([]);
+                setUnfinishedOnly(false);
               }}
               className="px-2 py-1 text-xs rounded border border-border hover:bg-accent transition-colors flex items-center gap-1"
             >
@@ -402,7 +434,7 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
             const dateNum = day.getDate();
 
             // Hide empty days when filters are applied
-            const hasActiveFilters = selectedDate || selectedSubIds.length > 0 || selectedStatuses.length > 0;
+            const hasActiveFilters = selectedDate || selectedSubIds.length > 0 || selectedStatuses.length > 0 || unfinishedOnly;
             if (hasActiveFilters && dayProjects.length === 0) {
               return null;
             }

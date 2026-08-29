@@ -706,6 +706,19 @@ export async function createChecklistItem(data: InsertProjectChecklistItem): Pro
   return (result[0] as { insertId: number }).insertId;
 }
 
+/** Project IDs that still have at least one active, not-completed checklist item. */
+export async function getProjectIdsWithUnfinishedItems(): Promise<number[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .selectDistinct({ projectId: projectChecklistItems.projectId })
+    .from(projectChecklistItems)
+    .where(
+      and(eq(projectChecklistItems.isActive, true), eq(projectChecklistItems.isCompleted, false))
+    );
+  return rows.map((r) => r.projectId);
+}
+
 export async function getChecklistItemsForProject(projectId: number): Promise<ProjectChecklistItem[]> {
   const db = await getDb();
   if (!db) return [];

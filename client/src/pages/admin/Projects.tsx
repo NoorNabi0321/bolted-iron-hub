@@ -52,6 +52,7 @@ export default function AdminProjects() {
   const [dateOverrides, setDateOverrides] = useState<Record<number, { startDate?: number | null; estimatedEndDate?: number | null }>>({});
   const [editingDateField, setEditingDateField] = useState<{ projectId: number; field: 'startDate' | 'estimatedEndDate' } | null>(null);
   const [isUnassigned, setIsUnassigned] = useState(false);
+  const [unfinishedOnly, setUnfinishedOnly] = useState(false);
   const [projectAssignments, setProjectAssignments] = useState<Record<number, any[]>>({});
   const [deleteConfirm, setDeleteConfirm] = useState<{ projectId: number; projectName: string } | null>(null);
   const [showPDFDialog, setShowPDFDialog] = useState(false);
@@ -66,6 +67,7 @@ export default function AdminProjects() {
     subcontractorId: !isUnassigned && subFilter !== "all" ? parseInt(subFilter) : undefined,
     isUnassigned: isUnassigned || undefined,
     isArchived: false,
+    unfinishedOnly: unfinishedOnly || undefined,
   });
   const { data: subs = [] } = trpc.subcontractors.list.useQuery();
 
@@ -213,6 +215,16 @@ export default function AdminProjects() {
                 ))}
               </SelectContent>
             </Select>
+
+            <Button
+              size="sm"
+              variant={unfinishedOnly ? "default" : "outline"}
+              onClick={() => setUnfinishedOnly((v) => !v)}
+              className={`whitespace-nowrap ${unfinishedOnly ? "bg-amber-600 hover:bg-amber-700" : ""}`}
+              title="Show jobs with open (unfinished) checklist items — including passed inspection"
+            >
+              Unfinished items
+            </Button>
 
             {/* Export PDF Button */}
             <Dialog open={showPDFDialog} onOpenChange={setShowPDFDialog}>

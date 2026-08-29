@@ -48,6 +48,7 @@ import {
   getAllSubcontractors,
   getSetting,
   setSetting,
+  getProjectIdsWithUnfinishedItems,
 } from "../db";
 import { protectedProcedure, router } from "../_core/trpc";
 import { generateSchedulePDF, ScheduleData, generateProjectsListPDF, ProjectsListData, ProjectsListPDFOptions } from "../_core/pdfGenerator";
@@ -321,11 +322,13 @@ export const projectsRouter = router({
           startDateTo: z.number().optional(),
           isArchived: z.boolean().optional(),
           includeInspectionPassed: z.boolean().optional(),
+          /** Only jobs that still have an open (active, not-completed) checklist item. */
+          unfinishedOnly: z.boolean().optional(),
         })
         .optional()
     )
     .query(async ({ input }) => {
-      return getAllProjects({
+      const list = await getAllProjects({
         status: input?.status,
         subcontractorId: input?.subcontractorId,
         isUnassigned: input?.isUnassigned,
@@ -333,8 +336,14 @@ export const projectsRouter = router({
         startDateFrom: input?.startDateFrom ? new Date(input.startDateFrom) : undefined,
         startDateTo: input?.startDateTo ? new Date(input.startDateTo) : undefined,
         isArchived: input?.isArchived,
-        includeInspectionPassed: input?.includeInspectionPassed,
+        // The unfinished filter must surface passed-inspection jobs with open items.
+        includeInspectionPassed: input?.unfinishedOnly ? true : input?.includeInspectionPassed,
       });
+      if (input?.unfinishedOnly) {
+        const unfinished = new Set(await getProjectIdsWithUnfinishedItems());
+        return list.filter((p) => unfinished.has(p.id));
+      }
+      return list;
     }),
 
   // Subcontractor: get their assigned projects
