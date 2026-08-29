@@ -157,6 +157,9 @@ export default function AdminProjectDetail() {
   const updateStatusMutation = trpc.projects.updateStatus.useMutation({
     onSuccess: () => {
       utils.projects.get.invalidate({ id: projectId });
+      // Refresh the Projects list + dashboard so the new status shows without a manual reload.
+      utils.projects.list.invalidate();
+      utils.projects.myProjects.invalidate();
       toast.success("Status updated");
     },
   });
@@ -434,6 +437,7 @@ export default function AdminProjectDetail() {
                   onSuccess={() => {
                     setShowEditDialog(false);
                     utils.projects.get.invalidate({ id: projectId });
+                    utils.projects.list.invalidate();
                   }}
                 />
               </DialogContent>
