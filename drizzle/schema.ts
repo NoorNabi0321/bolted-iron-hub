@@ -54,6 +54,7 @@ export const PROJECT_STATUSES = [
   "Shop Drawings",
   "Fabrication",
   "On-Site",
+  "Measurements",
   "Installed",
   "Inspection Passed",
 ] as const;

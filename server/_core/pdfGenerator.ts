@@ -42,6 +42,7 @@ export async function generateChecklistProgressPDF(
   const tableRight = pageWidth - margin;
 
   const navy = rgb(23 / 255, 37 / 255, 70 / 255);
+  const blue = rgb(37 / 255, 99 / 255, 235 / 255); // Measurements-status projects
   const white = rgb(1, 1, 1);
   const green = rgb(22 / 255, 163 / 255, 74 / 255);
   const amber = rgb(202 / 255, 138 / 255, 4 / 255);
@@ -115,10 +116,12 @@ export async function generateChecklistProgressPDF(
     projNum++;
     ensure(52);
 
-    // Project header: number badge + name (+ overall progress badge)
+    // Project header: number badge + name (+ overall progress badge).
+    // Measurements-status projects are drawn blue.
+    const headerColor = proj.status === "Measurements" ? blue : navy;
     const badge = 20;
     const topY = y;
-    page.drawRectangle({ x: margin, y: topY - badge, width: badge, height: badge, color: navy });
+    page.drawRectangle({ x: margin, y: topY - badge, width: badge, height: badge, color: headerColor });
     const numStr = String(projNum);
     page.drawText(numStr, { x: margin + (badge - bold.widthOfTextAtSize(numStr, 11)) / 2, y: topY - badge + 6, size: 11, font: bold, color: white });
 
@@ -135,7 +138,7 @@ export async function generateChecklistProgressPDF(
       page.drawText(opVal, { x: boxX + 8 + opLabelW, y: topY - badge + 5, size: 11, font: bold, color: navy });
       nameMaxW = boxX - (margin + badge + 10) - 8;
     }
-    page.drawText(fitText(sanitize(proj.name.toUpperCase()), bold, 12, nameMaxW), { x: margin + badge + 10, y: topY - badge + 5, size: 12, font: bold, color: navy });
+    page.drawText(fitText(sanitize(proj.name.toUpperCase()), bold, 12, nameMaxW), { x: margin + badge + 10, y: topY - badge + 5, size: 12, font: bold, color: headerColor });
     y = topY - badge - 14;
 
     // Collapsed project — single "No Change This Week" pill.

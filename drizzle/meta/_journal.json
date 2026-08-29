@@ -162,6 +162,13 @@
       "when": 1784815476038,
       "tag": "0022_tiny_sage",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1787985059772,
+      "tag": "0023_plain_vulcan",
+      "breakpoints": true
     }
   ]
 }

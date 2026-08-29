@@ -284,9 +284,12 @@ export const projectsRouter = router({
           items: reportItems,
         });
       }
-      // Updated-this-period projects first, then the "No Change This Week" ones;
-      // alphabetical within each group.
+      // Measurements projects always at the very bottom; then updated-this-period
+      // projects, then "No Change This Week"; alphabetical within each group.
       projectsData.sort((a, b) => {
+        const aM = a.status === "Measurements";
+        const bM = b.status === "Measurements";
+        if (aM !== bM) return aM ? 1 : -1;
         if (a.noChange !== b.noChange) return a.noChange ? 1 : -1;
         return a.name.localeCompare(b.name);
       });

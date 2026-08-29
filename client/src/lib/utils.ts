@@ -10,6 +10,7 @@ export const PROJECT_STATUSES = [
   "Shop Drawings",
   "Fabrication",
   "On-Site",
+  "Measurements",
   "Installed",
   "Inspection Passed",
 ] as const;
@@ -22,6 +23,7 @@ export function getStatusClass(status: string): string {
     case "Shop Drawings": return "bg-blue-50 text-blue-700 border border-blue-200";
     case "Fabrication": return "bg-yellow-50 text-yellow-700 border border-yellow-200";
     case "On-Site": return "bg-orange-50 text-orange-700 border border-orange-200";
+    case "Measurements": return "bg-sky-50 text-sky-700 border border-sky-200";
     case "Installed": return "bg-green-50 text-green-700 border border-green-200";
     case "Inspection Passed": return "bg-emerald-50 text-emerald-700 border border-emerald-200";
     default: return "bg-gray-100 text-gray-600";
