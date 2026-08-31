@@ -4,6 +4,7 @@ import { Calendar, ChevronLeft, ChevronRight, Clock, MapPin, X, FileDown, Mail, 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { nyToday } from "@/lib/utils";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -68,7 +69,7 @@ function isWithinRange(day: Date, start: Date | null, end: Date | null): boolean
 }
 
 function formatDayLabel(date: Date): string {
-  const today = new Date();
+  const today = nyToday();
   if (isSameDay(date, today)) return "Today";
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -191,7 +192,7 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
 
   // Generate 7 days starting from today + weekOffset
   const days = useMemo(() => {
-    const today = new Date();
+    const today = nyToday();
     // Start from today (not Sunday) and add weekOffset weeks
     const startDate = new Date(today);
     startDate.setDate(today.getDate() + weekOffset * 7);
@@ -272,7 +273,7 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
   // Get dates with projects for calendar highlighting
   const datesWithProjects = useMemo(() => {
     const dates = new Set<string>();
-    const today = new Date();
+    const today = nyToday();
     const maxDaysAhead = 365; // Show up to 1 year ahead for single-date projects
     
     projects.forEach(p => {
@@ -319,7 +320,7 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
     return `${startStr} – ${endStr}`;
   }, [days]);
 
-  const today = new Date();
+  const today = nyToday();
 
   return (
     <Card className="border-border">

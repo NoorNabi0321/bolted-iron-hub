@@ -5,6 +5,41 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// The business operates on New York time regardless of the viewer's timezone.
+export const NEW_YORK_TZ = "America/New_York";
+
+function tzParts(d: Date, tz: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    weekday: "short",
+    hour12: false,
+  }).formatToParts(d);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return {
+    year: Number(get("year")),
+    month: Number(get("month")),
+    day: Number(get("day")),
+    hour: Number(get("hour")),
+    weekday: get("weekday"),
+  };
+}
+
+/** Current date/time components in New York. */
+export function nyNowParts() {
+  return tzParts(new Date(), NEW_YORK_TZ);
+}
+
+/** A Date whose LOCAL calendar date equals today's date in New York (local midnight). */
+export function nyToday(): Date {
+  const p = nyNowParts();
+  return new Date(p.year, p.month - 1, p.day);
+}
+
 export const PROJECT_STATUSES = [
   "Review",
   "Shop Drawings",

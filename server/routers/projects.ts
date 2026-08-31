@@ -110,10 +110,11 @@ const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
 
 /** The reporting week runs Wednesday 00:00 → Tuesday 23:59 (Tuesday is the last day). */
 function getWeekWindow(reference?: Date): { weekStart: Date; weekEnd: Date } {
-  const now = reference ?? new Date();
-  const daysSinceWednesday = (now.getDay() - 3 + 7) % 7;
-  const weekStart = new Date(now);
-  weekStart.setDate(now.getDate() - daysSinceWednesday);
+  // Work in New York wall-clock time so the Wednesday boundary matches the office.
+  const nyNow = new Date((reference ?? new Date()).toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const daysSinceWednesday = (nyNow.getDay() - 3 + 7) % 7;
+  const weekStart = new Date(nyNow);
+  weekStart.setDate(nyNow.getDate() - daysSinceWednesday);
   weekStart.setHours(0, 0, 0, 0);
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 6);
