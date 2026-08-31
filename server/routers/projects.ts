@@ -888,6 +888,9 @@ export const projectsRouter = router({
       const scheduleCombos = await getScheduleCombinations();
       const tzOffset = input.timezoneOffset ?? 0;
       const dayKeyOf = (d: Date) => new Date(d.getTime() - tzOffset * 60000).toISOString().slice(0, 10);
+      // Shift day-identifier dates so their UTC value equals the intended New York
+      // calendar date (the dashboard sends days in the viewer's local timezone).
+      const shiftForDisplay = (d: Date) => new Date(d.getTime() - tzOffset * 60000);
       const combosByDayKey = new Map<string, number[][]>();
       for (const c of scheduleCombos) {
         if (!combosByDayKey.has(c.day)) combosByDayKey.set(c.day, []);
@@ -1005,7 +1008,7 @@ export const projectsRouter = router({
                           selectedDateObj !== null;
         
         if (dayProjects.length > 0 || !hasFilters) {
-          const dayName = day.toLocaleDateString('en-US', { weekday: 'long' });
+          const dayName = shiftForDisplay(day).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
           totalProjectsInPDF += dayProjects.length;
           
           // Track unique project IDs
@@ -1044,7 +1047,7 @@ export const projectsRouter = router({
               })),
           ];
           scheduleDataArray.push({
-            date: day,
+            date: shiftForDisplay(day),
             dayName,
             projects: pdfProjects,
           });
@@ -1057,8 +1060,8 @@ export const projectsRouter = router({
       
       const pdfBuffer = await generateSchedulePDF({
         scheduleData: scheduleDataArray,
-        weekStart: weekStartDate,
-        weekEnd: weekEndDate,
+        weekStart: shiftForDisplay(weekStartDate),
+        weekEnd: shiftForDisplay(weekEndDate),
         generatedAt: new Date(),
         uniqueProjectCount: uniqueProjectIds.size,
       });

@@ -316,18 +316,20 @@ export async function generateSchedulePDF(
       .substring(0, 150);
   };
 
-  // Helper to format dates
+  // Day dates are pre-shifted so their UTC value is the intended New York date.
   const formatDate = (date: Date): string => {
     return new Date(date).toLocaleDateString("en-US", {
+      timeZone: "UTC",
       year: "numeric",
       month: "short",
       day: "numeric",
     });
   };
 
-  // Helper to format datetime
+  // generatedAt is a real instant — show it in New York time.
   const formatDateTime = (date: Date): string => {
     return new Date(date).toLocaleString("en-US", {
+      timeZone: "America/New_York",
       year: "numeric",
       month: "short",
       day: "numeric",
