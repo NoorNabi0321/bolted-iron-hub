@@ -112,8 +112,47 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
     onSuccess: () => utils.projects.scheduleCombinations.invalidate(),
   });
   const [armed, setArmed] = useState<{ id: number; day: string } | null>(null);
+  const [dragOverId, setDragOverId] = useState<number | null>(null);
   const [comboDialog, setComboDialog] = useState<{ day: string; projects: { id: number; name: string }[] } | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragOverIdRef = useRef<number | null>(null);
+  const suppressClickRef = useRef(false);
+  useEffect(() => { dragOverIdRef.current = dragOverId; }, [dragOverId]);
+
+  // While a job is "picked up" (long-press), track the finger/cursor across cards
+  // so the job it is hovering over highlights blue, and drop = combine on release.
+  useEffect(() => {
+    if (!armed) return;
+    const onMove = (e: PointerEvent) => {
+      const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+      const card = el?.closest("[data-project-id]") as HTMLElement | null;
+      if (card && card.getAttribute("data-day") === armed.day) {
+        const tid = Number(card.getAttribute("data-project-id"));
+        setDragOverId(tid && tid !== armed.id ? tid : null);
+      } else {
+        setDragOverId(null);
+      }
+    };
+    const onUp = () => {
+      const target = dragOverIdRef.current;
+      if (target && target !== armed.id) {
+        combineMutation.mutate({ day: armed.day, sourceId: armed.id, targetId: target });
+      }
+      setArmed(null);
+      setDragOverId(null);
+      suppressClickRef.current = true;
+      window.setTimeout(() => { suppressClickRef.current = false; }, 350);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [armed]);
 
   const dayKey = (d: Date) => {
     const y = d.getFullYear();
@@ -131,10 +170,14 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
     return map;
   }, [combinations]);
 
-  const doCombine = (day: string, sourceId: number, targetId: number) => {
-    setArmed(null);
-    if (sourceId !== targetId) combineMutation.mutate({ day, sourceId, targetId });
-  };
+  // Resolve any project by id (from the full list, not just the day's scheduled
+  // ones) so a combined job that later leaves a day's list — e.g. moved to
+  // "Inspection Passed" — stays inside its group instead of dissolving it.
+  const projectById = useMemo(() => {
+    const map = new Map<number, Project>();
+    for (const p of projects) map.set(p.id, p);
+    return map;
+  }, [projects]);
 
   const startArm = (id: number, day: string) => {
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
@@ -483,15 +526,22 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
             const weekday = day.toLocaleDateString("en-US", { weekday: "short" });
             const dateNum = day.getDate();
             const dk = dayKey(day);
-            // Groups that have >= 2 members actually scheduled this day render as one card.
-            const effGroups = (combosByDay.get(dk) ?? [])
-              .map((ids) => ids.filter((id) => dayProjects.some((p) => p.id === id)))
-              .filter((ids) => ids.length >= 2);
-            const comboMemberIds = new Set(effGroups.flat());
+            // A combination is anchored to a calendar day: it renders on that day's
+            // row until the day itself scrolls out of the window. Members are looked
+            // up by id from ALL projects (not just this day's scheduled ones) so a
+            // job that left the list — e.g. moved to "Inspection Passed" — keeps the
+            // group intact instead of splitting it apart.
+            const showCombosHere = !selectedDate || isSameDay(day, selectedDate);
+            const dayCombos = showCombosHere
+              ? (combosByDay.get(dk) ?? [])
+                  .map((ids) => ids.map((id) => projectById.get(id)).filter((p): p is Project => !!p))
+                  .filter((members) => members.length >= 2)
+              : [];
+            const comboMemberIds = new Set(dayCombos.flat().map((p) => p.id));
 
             // Hide empty days when filters are applied
             const hasActiveFilters = selectedDate || selectedSubIds.length > 0 || selectedStatuses.length > 0 || unfinishedOnly;
-            if (hasActiveFilters && dayProjects.length === 0) {
+            if (hasActiveFilters && dayProjects.length === 0 && dayCombos.length === 0) {
               return null;
             }
 
@@ -526,32 +576,34 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
 
                   {/* Projects for this day */}
                   <div className="flex-1 p-2 sm:p-3">
-                    {dayProjects.length === 0 ? (
+                    {dayProjects.length === 0 && dayCombos.length === 0 ? (
                       <p className={`text-xs sm:text-sm py-1 ${isPast ? "text-muted-foreground/50" : "text-muted-foreground"}`}>
                         No jobs scheduled
                       </p>
                     ) : (
                       <div className="space-y-1.5">
                         {armed && armed.day === dk && (
-                          <p className="text-[10px] text-red-600 font-medium px-1">
-                            Tap another job to combine, or tap the highlighted job to cancel.
+                          <p className="text-[10px] text-blue-600 font-medium px-1">
+                            Drag onto another job to combine — release on the highlighted job.
                           </p>
                         )}
-                        {effGroups.map((ids, gi) => {
-                          const members = dayProjects.filter((p) => ids.includes(p.id));
+                        {dayCombos.map((members, gi) => {
+                          const anchorId = members[0].id;
+                          const isDropTarget = dragOverId === anchorId && armed?.day === dk;
                           return (
                             <div
                               key={`combo-${gi}`}
-                              onClick={() => setComboDialog({ day: dk, projects: members.map((m) => ({ id: m.id, name: m.name })) })}
-                              onDragOver={(e) => e.preventDefault()}
-                              onDrop={(e) => {
-                                e.preventDefault();
-                                try {
-                                  const d = JSON.parse(e.dataTransfer.getData("text/plain"));
-                                  if (d && d.day === dk) doCombine(dk, d.id, members[0].id);
-                                } catch {}
+                              data-project-id={anchorId}
+                              data-day={dk}
+                              onClick={() => {
+                                if (suppressClickRef.current) return;
+                                setComboDialog({ day: dk, projects: members.map((m) => ({ id: m.id, name: m.name })) });
                               }}
-                              className="flex items-center gap-2 p-1.5 sm:p-2 rounded-md cursor-pointer bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors"
+                              className={`flex items-center gap-2 p-1.5 sm:p-2 rounded-md cursor-pointer border transition-all ${
+                                isDropTarget
+                                  ? "bg-blue-100 border-blue-400 ring-2 ring-blue-400"
+                                  : "bg-indigo-50 hover:bg-indigo-100 border-indigo-200"
+                              }`}
                             >
                               <Layers className="w-4 h-4 text-indigo-600 flex-shrink-0" />
                               <div className="flex-1 min-w-0">
@@ -565,41 +617,39 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
                             </div>
                           );
                         })}
-                        {dayProjects.filter((p) => !comboMemberIds.has(p.id)).map((project) => (
+                        {dayProjects.filter((p) => !comboMemberIds.has(p.id)).map((project) => {
+                          const isPickedUp = armed?.id === project.id;
+                          const isDropTarget = dragOverId === project.id && armed?.day === dk && armed?.id !== project.id;
+                          const isPotentialTarget = !!armed && armed.day === dk && armed.id !== project.id && !isDropTarget;
+                          return (
                           <div
                             key={project.id}
                             data-project-id={project.id}
                             data-day={dk}
-                            draggable
-                            onDragStart={(e) => e.dataTransfer.setData("text/plain", JSON.stringify({ id: project.id, day: dk }))}
-                            onDragOver={(e) => e.preventDefault()}
-                            onDrop={(e) => {
-                              e.preventDefault();
-                              try {
-                                const d = JSON.parse(e.dataTransfer.getData("text/plain"));
-                                if (d && d.day === dk) doCombine(dk, d.id, project.id);
-                              } catch {}
-                            }}
-                            onPointerDown={() => startArm(project.id, dk)}
-                            onPointerMove={cancelArm}
-                            onPointerUp={cancelArm}
-                            onPointerLeave={cancelArm}
+                            style={{ touchAction: armed ? "none" : "pan-y" }}
+                            onPointerDown={(e) => { if (e.button != null && e.button > 0) return; startArm(project.id, dk); }}
+                            onPointerMove={() => { if (!armed) cancelArm(); }}
+                            onPointerUp={() => { if (!armed) cancelArm(); }}
+                            onPointerLeave={() => { if (!armed) cancelArm(); }}
                             onClick={(e) => {
                               if ((e.target as HTMLElement).closest('button')) return;
-                              if (armed && armed.day === dk && armed.id !== project.id) { doCombine(dk, armed.id, project.id); return; }
-                              if (armed && armed.id === project.id) { setArmed(null); return; }
+                              if (suppressClickRef.current || armed) return;
                               setLocation(`/projects/${project.id}`);
                             }}
-                            className={`flex items-center gap-2 sm:gap-3 p-1.5 sm:p-2 rounded-md cursor-pointer transition-colors group select-none ${
-                              armed?.id === project.id
-                                ? "ring-2 ring-red-500 bg-red-50"
-                                : armed?.day === dk
-                                ? "ring-1 ring-red-200"
+                            className={`flex items-center gap-2 sm:gap-3 p-1.5 sm:p-2 rounded-md cursor-pointer transition-all group select-none ${
+                              isPickedUp
+                                ? "ring-2 ring-indigo-500 bg-indigo-50 shadow-lg scale-[0.98] opacity-90"
+                                : isDropTarget
+                                ? "ring-2 ring-blue-500 bg-blue-100"
+                                : isPotentialTarget
+                                ? "ring-1 ring-blue-200 bg-blue-50/50"
                                 : ""
                             } ${
-                              project.isUrgent
+                              !isPickedUp && !isDropTarget && !isPotentialTarget && project.isUrgent
                                 ? "bg-yellow-50 hover:bg-yellow-100"
-                                : "hover:bg-accent/50"
+                                : !isPickedUp && !isDropTarget && !isPotentialTarget
+                                ? "hover:bg-accent/50"
+                                : ""
                             }`}
                           >
                             <div className="flex-1 min-w-0">
@@ -633,9 +683,16 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
                                 )}
                               </div>
                             </div>
-                            <StatusBadge status={statusOverrides[project.id] || project.status} projectId={project.id} className="text-[10px] sm:text-xs flex-shrink-0" onStatusChange={(newStatus) => setStatusOverrides({...statusOverrides, [project.id]: newStatus})} />
+                            {isPickedUp ? (
+                              <span className="flex items-center gap-1 text-[10px] sm:text-xs font-semibold text-indigo-600 flex-shrink-0">
+                                <Layers className="w-3 h-3" /> Dragging…
+                              </span>
+                            ) : (
+                              <StatusBadge status={statusOverrides[project.id] || project.status} projectId={project.id} className="text-[10px] sm:text-xs flex-shrink-0" onStatusChange={(newStatus) => setStatusOverrides({...statusOverrides, [project.id]: newStatus})} />
+                            )}
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
