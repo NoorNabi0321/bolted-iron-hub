@@ -202,6 +202,18 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
     return map;
   }, [projects]);
 
+  // Whether a project passes the user-driven Status / Subcontractor filters.
+  // (Kept separate from the date/inspection scheduling rules so a combined group
+  // still honours these filters without dissolving over inspection state.)
+  const passesUserFilters = (p: Project) => {
+    if (selectedStatuses.length > 0 && !selectedStatuses.includes(p.status)) return false;
+    if (selectedSubIds.length > 0) {
+      const assigns = projectAssignments[p.id] || [];
+      if (!assigns.some((a) => selectedSubIds.includes(a.subcontractorId))) return false;
+    }
+    return true;
+  };
+
   const startArm = (id: number, day: string) => {
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
     longPressTimer.current = setTimeout(() => {
@@ -558,7 +570,9 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
             const dayCombos = showCombosHere
               ? (combosByDay.get(dk) ?? [])
                   .map((ids) => ids.map((id) => projectById.get(id)).filter((p): p is Project => !!p))
-                  .filter((members) => members.length >= 2)
+                  // keep the group intact across inspection state, but still honour
+                  // the Status / Sub filters — hide a group none of whose jobs match.
+                  .filter((members) => members.length >= 2 && members.some(passesUserFilters))
               : [];
             const comboMemberIds = new Set(dayCombos.flat().map((p) => p.id));
 
