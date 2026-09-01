@@ -117,25 +117,45 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragOverIdRef = useRef<number | null>(null);
   const suppressClickRef = useRef(false);
+  const ghostRef = useRef<HTMLDivElement | null>(null);
+  const pointerPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   useEffect(() => { dragOverIdRef.current = dragOverId; }, [dragOverId]);
 
+  const vibrate = (ms: number) => { try { (navigator as any).vibrate?.(ms); } catch {} };
+
+  const moveGhost = (x: number, y: number) => {
+    if (ghostRef.current) {
+      ghostRef.current.style.transform = `translate(${x}px, ${y}px) translate(-50%, -140%)`;
+    }
+  };
+
   // While a job is "picked up" (long-press), track the finger/cursor across cards
-  // so the job it is hovering over highlights blue, and drop = combine on release.
+  // so the job it is hovering over highlights blue, a floating chip follows the
+  // finger, and the page can't scroll under the drag. Drop = combine on release.
   useEffect(() => {
     if (!armed) return;
     const onMove = (e: PointerEvent) => {
+      pointerPosRef.current = { x: e.clientX, y: e.clientY };
+      moveGhost(e.clientX, e.clientY);
       const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
       const card = el?.closest("[data-project-id]") as HTMLElement | null;
+      let next: number | null = null;
       if (card && card.getAttribute("data-day") === armed.day) {
         const tid = Number(card.getAttribute("data-project-id"));
-        setDragOverId(tid && tid !== armed.id ? tid : null);
-      } else {
-        setDragOverId(null);
+        if (tid && tid !== armed.id) next = tid;
+      }
+      if (next !== dragOverIdRef.current) {
+        if (next) vibrate(12); // tick when a new target lights up
+        setDragOverId(next);
       }
     };
+    // Hard scroll-lock: a non-passive touchmove that preventDefaults keeps the
+    // list still under the finger so the drag feels anchored, not scrolly.
+    const onTouchMove = (e: TouchEvent) => { e.preventDefault(); };
     const onUp = () => {
       const target = dragOverIdRef.current;
       if (target && target !== armed.id) {
+        vibrate(25);
         combineMutation.mutate({ day: armed.day, sourceId: armed.id, targetId: target });
       }
       setArmed(null);
@@ -143,13 +163,16 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
       suppressClickRef.current = true;
       window.setTimeout(() => { suppressClickRef.current = false; }, 350);
     };
+    moveGhost(pointerPosRef.current.x, pointerPosRef.current.y);
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
+      window.removeEventListener("touchmove", onTouchMove);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [armed]);
@@ -183,8 +206,8 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
     longPressTimer.current = setTimeout(() => {
       setArmed({ id, day });
-      try { (navigator as any).vibrate?.(25); } catch {}
-    }, 400);
+      vibrate(30); // "grabbed" buzz
+    }, 250);
   };
   const cancelArm = () => {
     if (longPressTimer.current) {
@@ -627,7 +650,7 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
                             data-project-id={project.id}
                             data-day={dk}
                             style={{ touchAction: armed ? "none" : "pan-y" }}
-                            onPointerDown={(e) => { if (e.button != null && e.button > 0) return; startArm(project.id, dk); }}
+                            onPointerDown={(e) => { if (e.button != null && e.button > 0) return; pointerPosRef.current = { x: e.clientX, y: e.clientY }; startArm(project.id, dk); }}
                             onPointerMove={() => { if (!armed) cancelArm(); }}
                             onPointerUp={() => { if (!armed) cancelArm(); }}
                             onPointerLeave={() => { if (!armed) cancelArm(); }}
@@ -638,7 +661,7 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
                             }}
                             className={`flex items-center gap-2 sm:gap-3 p-1.5 sm:p-2 rounded-md cursor-pointer transition-all group select-none ${
                               isPickedUp
-                                ? "ring-2 ring-indigo-500 bg-indigo-50 shadow-lg scale-[0.98] opacity-90"
+                                ? "border-2 border-dashed border-indigo-300 bg-indigo-50/50 opacity-50"
                                 : isDropTarget
                                 ? "ring-2 ring-blue-500 bg-blue-100"
                                 : isPotentialTarget
@@ -702,6 +725,25 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
           })}
         </div>
       </CardContent>
+
+      {/* Floating drag chip that follows the finger while a job is picked up */}
+      {armed && (
+        <div
+          ref={(el) => {
+            ghostRef.current = el;
+            if (el) {
+              const { x, y } = pointerPosRef.current;
+              el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -140%)`;
+            }
+          }}
+          className="fixed left-0 top-0 z-[60] pointer-events-none"
+        >
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-600 text-white shadow-2xl text-xs font-semibold whitespace-nowrap opacity-95">
+            <Layers className="w-4 h-4" />
+            {projectById.get(armed.id)?.name ?? "Job"}
+          </div>
+        </div>
+      )}
 
       {/* Combined-jobs chooser */}
       <Dialog open={!!comboDialog} onOpenChange={(o) => !o && setComboDialog(null)}>
