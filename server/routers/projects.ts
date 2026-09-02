@@ -260,8 +260,10 @@ export const projectsRouter = router({
         // Only NON-repair item changes count (repair activity is ignored entirely).
         const changedCount = items.filter((i) => affected.has(i.id)).length;
         const hasRecentActivity = items.some((i) => recent.has(i.id));
-        // Idle for 2+ weeks (no non-repair activity) -> leave off the report entirely.
-        if (changedCount === 0 && !hasRecentActivity) continue;
+        // A project appears only if a (non-repair) checklist item changed within
+        // the last 2 weeks. Idle for 2+ weeks -> drop off entirely; it returns the
+        // moment an item changes again (and drops off again after 2 more idle weeks).
+        if (!hasRecentActivity) continue;
         const noChange = changedCount === 0; // no change this period -> "No Change This Week"
         totalActions += changedCount;
 
@@ -307,12 +309,9 @@ export const projectsRouter = router({
           items: reportItems,
         });
       }
-      // Measurements projects always at the very bottom; then updated-this-period
-      // projects, then "No Change This Week"; alphabetical within each group.
+      // Updated-this-period projects first, then "No Change This Week";
+      // alphabetical within each group.
       projectsData.sort((a, b) => {
-        const aM = a.status === "Measurements";
-        const bM = b.status === "Measurements";
-        if (aM !== bM) return aM ? 1 : -1;
         if (a.noChange !== b.noChange) return a.noChange ? 1 : -1;
         return a.name.localeCompare(b.name);
       });

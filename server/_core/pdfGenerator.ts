@@ -42,7 +42,6 @@ export async function generateChecklistProgressPDF(
   const tableRight = pageWidth - margin;
 
   const navy = rgb(23 / 255, 37 / 255, 70 / 255);
-  const blue = rgb(37 / 255, 99 / 255, 235 / 255); // Measurements-status projects
   const white = rgb(1, 1, 1);
   const green = rgb(22 / 255, 163 / 255, 74 / 255);
   const amber = rgb(202 / 255, 138 / 255, 4 / 255);
@@ -117,8 +116,7 @@ export async function generateChecklistProgressPDF(
     ensure(52);
 
     // Project header: number badge + name (+ overall progress badge).
-    // Measurements-status projects are drawn blue.
-    const headerColor = proj.status === "Measurements" ? blue : navy;
+    const headerColor = navy;
     const badge = 20;
     const topY = y;
     page.drawRectangle({ x: margin, y: topY - badge, width: badge, height: badge, color: headerColor });

@@ -658,6 +658,8 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
                           const isPickedUp = armed?.id === project.id;
                           const isDropTarget = dragOverId === project.id && armed?.day === dk && armed?.id !== project.id;
                           const isPotentialTarget = !!armed && armed.day === dk && armed.id !== project.id && !isDropTarget;
+                          const effStatus = statusOverrides[project.id] || project.status;
+                          const isMeasurements = effStatus === "Measurements";
                           return (
                           <div
                             key={project.id}
@@ -682,16 +684,18 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
                                 ? "ring-1 ring-blue-200 bg-blue-50/50"
                                 : ""
                             } ${
-                              !isPickedUp && !isDropTarget && !isPotentialTarget && project.isUrgent
+                              isPickedUp || isDropTarget || isPotentialTarget
+                                ? ""
+                                : project.isUrgent
                                 ? "bg-yellow-50 hover:bg-yellow-100"
-                                : !isPickedUp && !isDropTarget && !isPotentialTarget
-                                ? "hover:bg-accent/50"
-                                : ""
+                                : isMeasurements
+                                ? "bg-blue-50 hover:bg-blue-100"
+                                : "hover:bg-accent/50"
                             }`}
                           >
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1">
-                                <p className="text-xs sm:text-sm font-medium text-foreground truncate group-hover:text-red-600 transition-colors">
+                                <p className={`text-xs sm:text-sm font-medium truncate group-hover:text-red-600 transition-colors ${isMeasurements ? "text-blue-700" : "text-foreground"}`}>
                                   {project.name}
                                   {project.isUrgent && <span className="ml-1 text-orange-700">*</span>}
                                 </p>
