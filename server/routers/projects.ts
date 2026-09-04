@@ -1015,35 +1015,31 @@ export const projectsRouter = router({
           
           console.log(`[PDF Export] Day ${dayName} (${day.toISOString().split('T')[0]}): ${dayProjects.length} projects`);
           
-          // Merge combined groups (>=2 members scheduled this day) into one entry.
+          // Combined groups (>=2 members scheduled this day): keep the jobs as
+          // separate rows but tag them so the PDF renders them in the blue
+          // "combined" theme, with group members kept adjacent.
           const dk = dayKeyOf(day);
           const groups = (combosByDayKey.get(dk) ?? [])
             .map((ids) => dayProjects.filter((p) => ids.includes(p.id)))
             .filter((g) => g.length >= 2);
           const comboIds = new Set(groups.flatMap((g) => g.map((p) => p.id)));
+          const toEntry = (p: (typeof dayProjects)[number], combo?: { size: number }) => ({
+            id: p.id.toString(),
+            name: p.name,
+            status: p.status as string,
+            address: p.address ?? "",
+            isUrgent: Boolean((p as any).isUrgent),
+            isCombined: !!combo,
+            comboSize: combo?.size,
+            startTime: p.startTime,
+            estimatedEndTime: p.estimatedEndTime,
+            subcontractors: [] as { id: string; companyName: string }[],
+          });
           const pdfProjects = [
-            ...groups.map((g) => ({
-              id: g.map((p) => p.id).join("-"),
-              name: g.map((p) => p.name).join(" + "),
-              status: g[0].status as string,
-              address: g[0].address ?? "",
-              isUrgent: g.some((p) => Boolean((p as any).isUrgent)),
-              startTime: g[0].startTime,
-              estimatedEndTime: g[0].estimatedEndTime,
-              subcontractors: [] as { id: string; companyName: string }[],
-            })),
-            ...dayProjects
-              .filter((p) => !comboIds.has(p.id))
-              .map((p) => ({
-                id: p.id.toString(),
-                name: p.name,
-                status: p.status as string,
-                address: p.address ?? "",
-                isUrgent: Boolean((p as any).isUrgent),
-                startTime: p.startTime,
-                estimatedEndTime: p.estimatedEndTime,
-                subcontractors: [] as { id: string; companyName: string }[],
-              })),
+            // combined jobs first, members adjacent, each on its own blue row
+            ...groups.flatMap((g) => g.map((p) => toEntry(p, { size: g.length }))),
+            // then the remaining (non-combined) jobs
+            ...dayProjects.filter((p) => !comboIds.has(p.id)).map((p) => toEntry(p)),
           ];
           scheduleDataArray.push({
             date: shiftForDisplay(day),

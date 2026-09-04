@@ -222,6 +222,8 @@ export interface ScheduleData {
     address: string;
     status: string;
     isUrgent: boolean;
+    isCombined?: boolean; // part of a day's combined group -> blue theme
+    comboSize?: number; // how many jobs are combined together
     startTime: string | null; // HH:MM format
     estimatedEndTime: string | null; // HH:MM format
     subcontractors: Array<{
@@ -516,8 +518,16 @@ export async function generateSchedulePDF(
       { key: "status", width: 80 },
     ];
 
-    // Alternate row background - Yellow for urgent, light gray for normal
-    if (data.isUrgent) {
+    // Row background - Blue for combined jobs, yellow for urgent, light gray alt.
+    if (data.isCombined) {
+      page.drawRectangle({
+        x: margin,
+        y: y - rowHeight,
+        width: contentWidth,
+        height: rowHeight,
+        color: rgb(219 / 255, 234 / 255, 254 / 255), // Blue background for combined
+      });
+    } else if (data.isUrgent) {
       page.drawRectangle({
         x: margin,
         y: y - rowHeight,
@@ -545,6 +555,17 @@ export async function generateSchedulePDF(
       borderWidth: 0.5,
     });
 
+    // Blue left accent bar ties adjacent combined rows together as one group.
+    if (data.isCombined) {
+      page.drawRectangle({
+        x: margin,
+        y: y - rowHeight,
+        width: 3,
+        height: rowHeight,
+        color: rgb(37 / 255, 99 / 255, 235 / 255), // Blue-600 accent
+      });
+    }
+
     let x = margin + 5;
     columns.forEach((col) => {
       if (col.key === "timeDuration") {
@@ -567,20 +588,39 @@ export async function generateSchedulePDF(
           font: helvetica,
           color: rgb(0, 0, 0),
         });
+      } else if (col.key === "status" && data.isCombined) {
+        // Combined rows: status on top, a blue "Combined" tag underneath.
+        page.drawText(sanitize(data.status || "-"), {
+          x,
+          y: y - 9,
+          size: 8,
+          font: helvetica,
+          color: rgb(0, 0, 0),
+        });
+        page.drawText(sanitize(data.comboSize ? `Combined (${data.comboSize})` : "Combined"), {
+          x,
+          y: y - 18,
+          size: 7,
+          font: helveticaBold,
+          color: rgb(37 / 255, 99 / 255, 235 / 255), // Blue-600
+        });
       } else {
         let value = sanitize(data[col.key] || "-");
+        const isNameCol = col.key === "name";
         // Add asterisk after project name for urgent projects
-        if (col.key === "name" && data.isUrgent) {
+        if (isNameCol && data.isUrgent) {
           value = value + " *";
         }
-        const textColor = (col.key === "name" && data.isUrgent) 
+        const textColor = (isNameCol && data.isCombined)
+          ? rgb(29 / 255, 78 / 255, 216 / 255) // Blue-700 for combined project names
+          : (isNameCol && data.isUrgent)
           ? rgb(180 / 255, 83 / 255, 9 / 255) // Orange-brown for urgent project names
           : rgb(0, 0, 0); // Black for normal text
         page.drawText(value, {
           x,
           y: y - 15,
           size: 9,
-          font: helvetica,
+          font: (isNameCol && data.isCombined) ? helveticaBold : helvetica,
           color: textColor,
         });
       }
@@ -674,6 +714,8 @@ export async function generateSchedulePDF(
           estimatedEndTime: project.estimatedEndTime || "-",
           status: sanitize(project.status),
           isUrgent: project.isUrgent,
+          isCombined: project.isCombined,
+          comboSize: project.comboSize,
           rowNum,
         });
         rowNum++;
