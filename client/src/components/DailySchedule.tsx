@@ -86,7 +86,6 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedSubIds, setSelectedSubIds] = useState<number[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
-  const [projectAssignments, setProjectAssignments] = useState<Record<number, ProjectAssignment[]>>({});
   const [showPDFDialog, setShowPDFDialog] = useState(false);
   const [pdfData, setPdfData] = useState<{ url: string; filename: string } | null>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -234,39 +233,16 @@ export default function DailySchedule({ projects, subcontractors }: DailySchedul
     return map;
   }, [subcontractors]);
 
-  // Fetch assignments for all projects
-  useEffect(() => {
-    let cancelled = false;
-    
-    const fetchAllAssignments = async () => {
-      if (scheduleProjects.length === 0) return;
-
-      const assignments: Record<number, ProjectAssignment[]> = {};
-      const promises = scheduleProjects.map(async (project) => {
-        try {
-          const result = await utils.projects.getAssignments.fetch({ projectId: project.id });
-          if (!cancelled) {
-            assignments[project.id] = result || [];
-          }
-        } catch (error) {
-          if (!cancelled) {
-            assignments[project.id] = [];
-          }
-        }
-      });
-      
-      await Promise.all(promises);
-      if (!cancelled) {
-        setProjectAssignments(assignments);
-      }
-    };
-    
-    fetchAllAssignments();
-    
-    return () => {
-      cancelled = true;
-    };
-  }, [scheduleProjects.map(p => p.id).join(','), utils]);
+  // Assignments for every scheduled project in ONE request (was N requests, each
+  // doing several far-away queries — the main cause of slow dashboard loads).
+  const scheduleProjectIds = useMemo(
+    () => scheduleProjects.map((p) => p.id).sort((a, b) => a - b),
+    [scheduleProjects]
+  );
+  const { data: projectAssignments = {} } = trpc.projects.getAssignmentsForProjects.useQuery(
+    { projectIds: scheduleProjectIds },
+    { enabled: scheduleProjectIds.length > 0, staleTime: 60_000 }
+  );
 
   // Generate 7 days starting from today + weekOffset
   const days = useMemo(() => {

@@ -515,6 +515,34 @@ export async function getAssignmentsWithSubcontractorDetails(
   return result;
 }
 
+/**
+ * Assignments (with subcontractor details) for many projects in just TWO queries
+ * total — one for all assignments, one for all referenced subcontractors — instead
+ * of the N+(N*M) round-trips of calling the per-project helper in a loop.
+ */
+export async function getAssignmentsWithSubsForProjects(
+  projectIds: number[]
+): Promise<Record<number, (ProjectAssignment & { subcontractor: Subcontractor })[]>> {
+  const db = await getDb();
+  if (!db || projectIds.length === 0) return {};
+  const assignments = await db
+    .select()
+    .from(projectAssignments)
+    .where(inArray(projectAssignments.projectId, projectIds));
+  const subIds = Array.from(new Set(assignments.map((a) => a.subcontractorId)));
+  const subs = subIds.length
+    ? await db.select().from(subcontractors).where(inArray(subcontractors.id, subIds))
+    : [];
+  const subMap = new Map(subs.map((s) => [s.id, s]));
+  const out: Record<number, (ProjectAssignment & { subcontractor: Subcontractor })[]> = {};
+  for (const a of assignments) {
+    const sub = subMap.get(a.subcontractorId);
+    if (!sub) continue;
+    (out[a.projectId] ||= []).push({ ...a, subcontractor: sub });
+  }
+  return out;
+}
+
 export async function isSubcontractorAssignedToProject(
   subcontractorId: number,
   projectId: number

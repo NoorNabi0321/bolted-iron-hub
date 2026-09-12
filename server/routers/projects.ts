@@ -11,6 +11,7 @@ import {
   getAllProjects,
   getAssignmentsForProject,
   getAssignmentsWithSubcontractorDetails,
+  getAssignmentsWithSubsForProjects,
   getProjectById,
   getProjectsForSubcontractor,
   getSubcontractorByUserId,
@@ -246,14 +247,23 @@ export const projectsRouter = router({
       // Projects in Review status never appear in any PDF report.
       projectList = projectList.filter((p) => p.status !== "Review");
 
-      const projectsData = [];
-      let totalActions = 0;
-      for (const project of projectList) {
-        // Full proposal checklist for this project — active AND inactive.
+      type ReportItem = {
+        text: string;
+        progress: number;
+        isActive: boolean;
+        isCompleted: boolean;
+        isUserAdded: boolean;
+        assignedTo: string | null;
+        change: number | null;
+      };
+
+      // Per-project work: the two DB reads (items + baseline). Returns null for a
+      // project that shouldn't appear (no items / idle 2+ weeks).
+      const buildProjectData = async (project: (typeof projectList)[number]) => {
         const items = (await getChecklistItemsForProject(project.id))
           .filter((i) => i.source === "extracted" && !i.isRepair)
           .sort((a, b) => a.order - b.order);
-        if (items.length === 0) continue;
+        if (items.length === 0) return null;
 
         const affected = affectedByProject.get(project.id) ?? new Set<number>();
         const recent = recentByProject.get(project.id) ?? new Set<number>();
@@ -263,9 +273,8 @@ export const projectsRouter = router({
         // A project appears only if a (non-repair) checklist item changed within
         // the last 2 weeks. Idle for 2+ weeks -> drop off entirely; it returns the
         // moment an item changes again (and drops off again after 2 more idle weeks).
-        if (!hasRecentActivity) continue;
+        if (!hasRecentActivity) return null;
         const noChange = changedCount === 0; // no change this period -> "No Change This Week"
-        totalActions += changedCount;
 
         // Overall progress = average across ACTIVE items (inactive don't count).
         const activeItems = items.filter((i) => i.isActive);
@@ -275,15 +284,7 @@ export const projectsRouter = router({
 
         // Only build the item rows when the project changed this week; the change
         // for each affected item is its current progress minus its start-of-week value.
-        let reportItems: Array<{
-          text: string;
-          progress: number;
-          isActive: boolean;
-          isCompleted: boolean;
-          isUserAdded: boolean;
-          assignedTo: string | null;
-          change: number | null;
-        }> = [];
+        let reportItems: ReportItem[] = [];
         if (!noChange) {
           const baseline = await getChecklistProgressAsOf(project.id, weekStart);
           reportItems = items.map((i) => {
@@ -300,14 +301,38 @@ export const projectsRouter = router({
           });
         }
 
-        projectsData.push({
-          id: project.id,
-          name: project.name,
-          status: project.status,
-          overallProgress,
-          noChange,
-          items: reportItems,
-        });
+        return {
+          changedCount,
+          entry: {
+            id: project.id,
+            name: project.name,
+            status: project.status,
+            overallProgress,
+            noChange,
+            items: reportItems,
+          },
+        };
+      };
+
+      // Run in small parallel batches so many projects don't each wait on the
+      // previous one's round-trip, without exceeding the DB connection pool.
+      const projectsData: Array<{
+        id: number;
+        name: string;
+        status: string;
+        overallProgress: number;
+        noChange: boolean;
+        items: ReportItem[];
+      }> = [];
+      let totalActions = 0;
+      const CHUNK = 8;
+      for (let i = 0; i < projectList.length; i += CHUNK) {
+        const results = await Promise.all(projectList.slice(i, i + CHUNK).map(buildProjectData));
+        for (const r of results) {
+          if (!r) continue;
+          totalActions += r.changedCount;
+          projectsData.push(r.entry);
+        }
       }
       // Updated-this-period projects first, then "No Change This Week";
       // alphabetical within each group.
@@ -515,6 +540,14 @@ export const projectsRouter = router({
     .input(z.object({ projectId: z.number() }))
     .query(async ({ input }) => {
       return getAssignmentsWithSubcontractorDetails(input.projectId);
+    }),
+
+  // Admin: assignments (with subcontractor details) for many projects at once.
+  // Lets the dashboard fetch every card's subs in one request instead of N.
+  getAssignmentsForProjects: adminProcedure
+    .input(z.object({ projectIds: z.array(z.number()) }))
+    .query(async ({ input }) => {
+      return getAssignmentsWithSubsForProjects(input.projectIds);
     }),
 
   // Admin: get files for project
@@ -903,6 +936,16 @@ export const projectsRouter = router({
         comboMemberMap.set(p.id, p);
       }
 
+      // When a subcontractor filter is active, preload every project's assignments
+      // in two queries up front — instead of a query per project, per day.
+      const subFilterActive = !!(input.subcontractorIds && input.subcontractorIds.length);
+      const assignmentsByProject = subFilterActive
+        ? await getAssignmentsWithSubsForProjects(Array.from(comboMemberMap.keys()))
+        : {};
+      const matchesSubFilter = (id: number) =>
+        !subFilterActive ||
+        (assignmentsByProject[id] ?? []).some((a) => input.subcontractorIds!.includes(a.subcontractorId));
+
       console.log('[PDF Export] Total projects fetched:', allProjects.length);
 
       // Helper functions (same as frontend DailySchedule.tsx)
@@ -996,17 +1039,9 @@ export const projectsRouter = router({
         let dayProjects = getProjectsForDay(day);
         const dk = dayKeyOf(day);
 
-        // Helper: does a project match the active subcontractor filter?
-        const matchesSubFilter = async (id: number) => {
-          if (!input.subcontractorIds || input.subcontractorIds.length === 0) return true;
-          const assignments = await getAssignmentsForProject(id);
-          return assignments.some((a) => input.subcontractorIds!.includes(a.subcontractorId));
-        };
-
-        // Apply subcontractor filter to the day's (solo) projects.
-        if (input.subcontractorIds && input.subcontractorIds.length > 0) {
-          const keep = await Promise.all(dayProjects.map((p) => matchesSubFilter(p.id)));
-          dayProjects = dayProjects.filter((_, i) => keep[i]) as typeof dayProjects;
+        // Apply subcontractor filter to the day's (solo) projects (preloaded map).
+        if (subFilterActive) {
+          dayProjects = dayProjects.filter((p) => matchesSubFilter(p.id)) as typeof dayProjects;
         }
 
         // Combined groups: resolve members by id from the full set (so passed /
@@ -1018,10 +1053,7 @@ export const projectsRouter = router({
         const groups: (typeof rawGroups) = [];
         for (const g of rawGroups) {
           const statusOk = !input.statuses?.length || g.some((p) => input.statuses!.includes(p.status));
-          let subOk = !input.subcontractorIds?.length;
-          if (!subOk) {
-            for (const p of g) { if (await matchesSubFilter(p.id)) { subOk = true; break; } }
-          }
+          const subOk = !subFilterActive || g.some((p) => matchesSubFilter(p.id));
           if (statusOk && subOk) groups.push(g);
         }
         const comboIds = new Set(groups.flatMap((g) => g.map((p) => p.id)));
