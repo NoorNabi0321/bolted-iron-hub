@@ -895,6 +895,13 @@ export const projectsRouter = router({
         if (!combosByDayKey.has(c.day)) combosByDayKey.set(c.day, []);
         combosByDayKey.get(c.day)!.push(c.projectIds);
       }
+      // Combined jobs are resolved by id from a fuller set (Inspection Passed
+      // included) so a combined member shows in the PDF exactly as it does on the
+      // dashboard — even if it isn't independently scheduled that day or is passed.
+      const comboMemberMap = new Map<number, (typeof allProjects)[number]>();
+      for (const p of (await getAllProjects({ isArchived: false, includeInspectionPassed: true })).filter((p) => p.status !== "Review")) {
+        comboMemberMap.set(p.id, p);
+      }
 
       console.log('[PDF Export] Total projects fetched:', allProjects.length);
 
@@ -987,43 +994,57 @@ export const projectsRouter = router({
         }
         
         let dayProjects = getProjectsForDay(day);
-        
-        // Apply subcontractor filter if provided
+        const dk = dayKeyOf(day);
+
+        // Helper: does a project match the active subcontractor filter?
+        const matchesSubFilter = async (id: number) => {
+          if (!input.subcontractorIds || input.subcontractorIds.length === 0) return true;
+          const assignments = await getAssignmentsForProject(id);
+          return assignments.some((a) => input.subcontractorIds!.includes(a.subcontractorId));
+        };
+
+        // Apply subcontractor filter to the day's (solo) projects.
         if (input.subcontractorIds && input.subcontractorIds.length > 0) {
-          const projectsWithSubs = await Promise.all(
-            dayProjects.map(async (p) => {
-              const assignments = await getAssignmentsForProject(p.id);
-              const hasSubcontractor = assignments.some(a => input.subcontractorIds!.includes(a.subcontractorId));
-              return hasSubcontractor ? p : null;
-            })
-          );
-          dayProjects = projectsWithSubs.filter((p) => p !== null) as typeof dayProjects;
+          const keep = await Promise.all(dayProjects.map((p) => matchesSubFilter(p.id)));
+          dayProjects = dayProjects.filter((_, i) => keep[i]) as typeof dayProjects;
         }
-        
+
+        // Combined groups: resolve members by id from the full set (so passed /
+        // not-yet-started members still show, exactly like the dashboard), then
+        // apply the same Status/Sub filters — the group shows if any member matches.
+        const rawGroups = (combosByDayKey.get(dk) ?? [])
+          .map((ids) => ids.map((id) => comboMemberMap.get(id)).filter((p): p is (typeof allProjects)[number] => !!p))
+          .filter((g) => g.length >= 2);
+        const groups: (typeof rawGroups) = [];
+        for (const g of rawGroups) {
+          const statusOk = !input.statuses?.length || g.some((p) => input.statuses!.includes(p.status));
+          let subOk = !input.subcontractorIds?.length;
+          if (!subOk) {
+            for (const p of g) { if (await matchesSubFilter(p.id)) { subOk = true; break; } }
+          }
+          if (statusOk && subOk) groups.push(g);
+        }
+        const comboIds = new Set(groups.flatMap((g) => g.map((p) => p.id)));
+        // A combined member must not also appear as a solo row.
+        const soloProjects = dayProjects.filter((p) => !comboIds.has(p.id));
+
         // Determine if we should show this day
         // Show empty days only if NO filters are applied
-        const hasFilters = (input.statuses && input.statuses.length > 0) || 
+        const hasFilters = (input.statuses && input.statuses.length > 0) ||
                           (input.subcontractorIds && input.subcontractorIds.length > 0) ||
                           selectedDateObj !== null;
-        
-        if (dayProjects.length > 0 || !hasFilters) {
+
+        if (soloProjects.length > 0 || groups.length > 0 || !hasFilters) {
           const dayName = shiftForDisplay(day).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
-          totalProjectsInPDF += dayProjects.length;
-          
+          totalProjectsInPDF += soloProjects.length + comboIds.size;
+
           // Track unique project IDs
-          dayProjects.forEach(p => uniqueProjectIds.add(p.id));
-          
-          console.log(`[PDF Export] Day ${dayName} (${day.toISOString().split('T')[0]}): ${dayProjects.length} projects`);
-          
-          // Combined groups (>=2 members scheduled this day): keep the jobs as
-          // separate rows but tag them so the PDF renders them in the blue
-          // "combined" theme, with group members kept adjacent.
-          const dk = dayKeyOf(day);
-          const groups = (combosByDayKey.get(dk) ?? [])
-            .map((ids) => dayProjects.filter((p) => ids.includes(p.id)))
-            .filter((g) => g.length >= 2);
-          const comboIds = new Set(groups.flatMap((g) => g.map((p) => p.id)));
-          const toEntry = (p: (typeof dayProjects)[number], combo?: { size: number }) => ({
+          soloProjects.forEach((p) => uniqueProjectIds.add(p.id));
+          comboIds.forEach((id) => uniqueProjectIds.add(id));
+
+          console.log(`[PDF Export] Day ${dayName} (${day.toISOString().split('T')[0]}): ${soloProjects.length} solo + ${comboIds.size} combined`);
+
+          const toEntry = (p: (typeof allProjects)[number], combo?: { size: number }) => ({
             id: p.id.toString(),
             name: p.name,
             status: p.status as string,
@@ -1039,7 +1060,7 @@ export const projectsRouter = router({
             // combined jobs first, members adjacent, each on its own blue row
             ...groups.flatMap((g) => g.map((p) => toEntry(p, { size: g.length }))),
             // then the remaining (non-combined) jobs
-            ...dayProjects.filter((p) => !comboIds.has(p.id)).map((p) => toEntry(p)),
+            ...soloProjects.map((p) => toEntry(p)),
           ];
           scheduleDataArray.push({
             date: shiftForDisplay(day),
