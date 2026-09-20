@@ -568,11 +568,17 @@ export async function generateSchedulePDF(
 
     let x = margin + 5;
     columns.forEach((col) => {
+      // A combined row is a single blue line of just the joined names — leave the
+      // detail columns (address / time / status) blank; keep only date, day, name.
+      if (data.isCombined && (col.key === "address" || col.key === "timeDuration" || col.key === "status")) {
+        x += col.width;
+        return;
+      }
       if (col.key === "timeDuration") {
         // Display start and end times vertically (converted to 12-hour format)
         const startTime = convert24To12Hour(data.startTime || "-");
         const endTime = convert24To12Hour(data.estimatedEndTime || "-");
-        
+
         page.drawText(sanitize(startTime), {
           x,
           y: y - 10,
@@ -580,7 +586,7 @@ export async function generateSchedulePDF(
           font: helvetica,
           color: rgb(0, 0, 0),
         });
-        
+
         page.drawText(sanitize(endTime), {
           x,
           y: y - 18,
@@ -588,27 +594,11 @@ export async function generateSchedulePDF(
           font: helvetica,
           color: rgb(0, 0, 0),
         });
-      } else if (col.key === "status" && data.isCombined) {
-        // Combined rows: status on top, a blue "Combined" tag underneath.
-        page.drawText(sanitize(data.status || "-"), {
-          x,
-          y: y - 9,
-          size: 8,
-          font: helvetica,
-          color: rgb(0, 0, 0),
-        });
-        page.drawText(sanitize(data.comboSize ? `Combined (${data.comboSize})` : "Combined"), {
-          x,
-          y: y - 18,
-          size: 7,
-          font: helveticaBold,
-          color: rgb(37 / 255, 99 / 255, 235 / 255), // Blue-600
-        });
       } else {
         let value = sanitize(data[col.key] || "-");
         const isNameCol = col.key === "name";
         // Add asterisk after project name for urgent projects
-        if (isNameCol && data.isUrgent) {
+        if (isNameCol && data.isUrgent && !data.isCombined) {
           value = value + " *";
         }
         const textColor = (isNameCol && data.isCombined)

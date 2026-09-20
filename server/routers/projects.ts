@@ -1076,21 +1076,33 @@ export const projectsRouter = router({
 
           console.log(`[PDF Export] Day ${dayName} (${day.toISOString().split('T')[0]}): ${soloProjects.length} solo + ${comboIds.size} combined`);
 
-          const toEntry = (p: (typeof allProjects)[number], combo?: { size: number }) => ({
+          const toEntry = (p: (typeof allProjects)[number]) => ({
             id: p.id.toString(),
             name: p.name,
             status: p.status as string,
             address: p.address ?? "",
             isUrgent: Boolean((p as any).isUrgent),
-            isCombined: !!combo,
-            comboSize: combo?.size,
+            isCombined: false,
+            comboSize: undefined as number | undefined,
             startTime: p.startTime,
             estimatedEndTime: p.estimatedEndTime,
             subcontractors: [] as { id: string; companyName: string }[],
           });
           const pdfProjects = [
-            // combined jobs first, members adjacent, each on its own blue row
-            ...groups.flatMap((g) => g.map((p) => toEntry(p, { size: g.length }))),
+            // Combined jobs collapse to ONE blue line: just the names joined with
+            // " + ". The other columns are left blank for that row.
+            ...groups.map((g) => ({
+              id: g.map((p) => p.id).join("-"),
+              name: g.map((p) => p.name).join(" + "),
+              status: "",
+              address: "",
+              isUrgent: false,
+              isCombined: true,
+              comboSize: g.length as number | undefined,
+              startTime: null,
+              estimatedEndTime: null,
+              subcontractors: [] as { id: string; companyName: string }[],
+            })),
             // then the remaining (non-combined) jobs
             ...soloProjects.map((p) => toEntry(p)),
           ];
