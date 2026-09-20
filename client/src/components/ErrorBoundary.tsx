@@ -39,17 +39,32 @@ class ErrorBoundary extends Component<Props, State> {
               </pre>
             </div>
 
-            <button
-              onClick={() => window.location.reload()}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-lg",
-                "bg-primary text-primary-foreground",
-                "hover:opacity-90 cursor-pointer"
-              )}
-            >
-              <RotateCcw size={16} />
-              Reload Page
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              {/* Soft reset first: re-render without a full reload so a transient
+                  glitch (e.g. an extension briefly re-parenting a node) recovers
+                  in place; falls through to a hard reload if it happens again. */}
+              <button
+                onClick={() => this.setState({ hasError: false, error: null })}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-lg",
+                  "bg-primary text-primary-foreground",
+                  "hover:opacity-90 cursor-pointer"
+                )}
+              >
+                <RotateCcw size={16} />
+                Try again
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-lg border border-border",
+                  "bg-background text-foreground",
+                  "hover:bg-muted cursor-pointer"
+                )}
+              >
+                Reload Page
+              </button>
+            </div>
           </div>
         </div>
       );
