@@ -1,10 +1,8 @@
-import { jsxLocPlugin } from "@builder.io/vite-plugin-jsx-loc";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import fs from "node:fs";
 import path from "node:path";
 import { defineConfig, type Plugin, type ViteDevServer } from "vite";
-import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
 
 // =============================================================================
 // Manus Debug Collector - Vite Plugin
@@ -150,7 +148,11 @@ function vitePluginManusDebugCollector(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector()];
+// Manus/builder dev plugins (jsxLocPlugin, vitePluginManusRuntime,
+// vitePluginManusDebugCollector) were removed after migrating off Manus — they
+// injected the /__manus__/debug-collector.js script and per-element source tags
+// into the production bundle.
+const plugins = [react(), tailwindcss()];
 
 export default defineConfig({
   plugins,
@@ -170,15 +172,7 @@ export default defineConfig({
   },
   server: {
     host: true,
-    allowedHosts: [
-      ".manuspre.computer",
-      ".manus.computer",
-      ".manus-asia.computer",
-      ".manuscomputer.ai",
-      ".manusvm.computer",
-      "localhost",
-      "127.0.0.1",
-    ],
+    allowedHosts: ["localhost", "127.0.0.1"],
     fs: {
       strict: true,
       deny: ["**/.*"],

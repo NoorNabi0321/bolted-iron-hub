@@ -7,6 +7,7 @@ import {
   varchar,
   decimal,
   boolean,
+  index,
 } from "drizzle-orm/mysql-core";
 
 export const PERMISSION_LEVELS = ["view", "edit", "admin"] as const;
@@ -86,7 +87,10 @@ export const projects = mysqlTable("projects", {
   isUrgent: boolean("isUrgent").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (t) => [
+  index("projects_status_idx").on(t.status),
+  index("projects_startDate_idx").on(t.startDate),
+]);
 
 export type Project = typeof projects.$inferSelect;
 export type InsertProject = typeof projects.$inferInsert;
@@ -98,7 +102,10 @@ export const projectAssignments = mysqlTable("project_assignments", {
   subcontractorId: int("subcontractorId").notNull(),
   role: varchar("role", { length: 100 }), // e.g. "Structural Steel", "Misc Metals"
   assignedAt: timestamp("assignedAt").defaultNow().notNull(),
-});
+}, (t) => [
+  index("project_assignments_projectId_idx").on(t.projectId),
+  index("project_assignments_subcontractorId_idx").on(t.subcontractorId),
+]);
 
 export type ProjectAssignment = typeof projectAssignments.$inferSelect;
 export type InsertProjectAssignment = typeof projectAssignments.$inferInsert;
@@ -133,7 +140,9 @@ export const projectNotes = mysqlTable("project_notes", {
   content: text("content").notNull(),
   isAdminOnly: boolean("isAdminOnly").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, (t) => [
+  index("project_notes_projectId_idx").on(t.projectId),
+]);
 
 export type ProjectNote = typeof projectNotes.$inferSelect;
 export type InsertProjectNote = typeof projectNotes.$inferInsert;
@@ -151,7 +160,9 @@ export const projectFiles = mysqlTable("project_files", {
   fileSize: int("fileSize"),
   isAdminOnly: boolean("isAdminOnly").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, (t) => [
+  index("project_files_projectId_idx").on(t.projectId),
+]);
 
 export type ProjectFile = typeof projectFiles.$inferSelect;
 export type InsertProjectFile = typeof projectFiles.$inferInsert;
@@ -172,7 +183,9 @@ export const projectChecklists = mysqlTable("project_checklists", {
   costUpdatedAt: timestamp("costUpdatedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (t) => [
+  index("project_checklists_projectId_idx").on(t.projectId),
+]);
 
 export type ProjectChecklist = typeof projectChecklists.$inferSelect;
 export type InsertProjectChecklist = typeof projectChecklists.$inferInsert;
@@ -193,7 +206,9 @@ export const changeOrders = mysqlTable("change_orders", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   approvedAt: timestamp("approvedAt"),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (t) => [
+  index("change_orders_projectId_idx").on(t.projectId),
+]);
 
 export type ChangeOrder = typeof changeOrders.$inferSelect;
 export type InsertChangeOrder = typeof changeOrders.$inferInsert;
@@ -210,7 +225,9 @@ export const projectMessages = mysqlTable("project_messages", {
   /** If true, only admins can see this message */
   isAdminOnly: boolean("isAdminOnly").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, (t) => [
+  index("project_messages_projectId_idx").on(t.projectId),
+]);
 
 export type ProjectMessage = typeof projectMessages.$inferSelect;
 export type InsertProjectMessage = typeof projectMessages.$inferInsert;
@@ -224,7 +241,9 @@ export const projectProposals = mysqlTable("project_proposals", {
   extractedItemsCount: int("extractedItemsCount").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (t) => [
+  index("project_proposals_projectId_idx").on(t.projectId),
+]);
 
 export type ProjectProposal = typeof projectProposals.$inferSelect;
 export type InsertProjectProposal = typeof projectProposals.$inferInsert;
@@ -248,7 +267,9 @@ export const projectChecklistItems = mysqlTable("project_checklist_items", {
   assignedSubcontractorId: int("assignedSubcontractorId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (t) => [
+  index("project_checklist_items_projectId_idx").on(t.projectId),
+]);
 
 export type ProjectChecklistItem = typeof projectChecklistItems.$inferSelect;
 export type InsertProjectChecklistItem = typeof projectChecklistItems.$inferInsert;
@@ -390,7 +411,10 @@ export const checklistActivity = mysqlTable("checklist_activity", {
   /** Who performed it (admin name or subcontractor company). */
   actorName: varchar("actorName", { length: 255 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, (t) => [
+  index("checklist_activity_projectId_idx").on(t.projectId),
+  index("checklist_activity_createdAt_idx").on(t.createdAt),
+]);
 
 export type ChecklistActivity = typeof checklistActivity.$inferSelect;
 export type InsertChecklistActivity = typeof checklistActivity.$inferInsert;
@@ -408,7 +432,9 @@ export const reportSnapshots = mysqlTable("report_snapshots", {
   /** Item progress 0-100 (100 when completed) captured at report time. */
   progress: int("progress").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, (t) => [
+  index("report_snapshots_projectId_weekStart_idx").on(t.projectId, t.weekStart),
+]);
 
 export type ReportSnapshot = typeof reportSnapshots.$inferSelect;
 export type InsertReportSnapshot = typeof reportSnapshots.$inferInsert;
