@@ -76,7 +76,7 @@ export function ProposalUploadSection({
           : `Replaced checklist with ${data.extractedItemsCount || 0} extracted items`
       );
       // Invalidate the extracted checklist items query to refetch from server
-      utils.projects.getChecklistItems.invalidate({ projectId, source: "extracted" });
+      utils.projects.getChecklistItems.invalidate({ projectId });
       utils.projects.getProposal.invalidate({ projectId });
       // Refresh parent data in background (no delay needed, just call it)
       onProposalUploaded?.();

@@ -1,5 +1,6 @@
 import { and, desc, eq, gte, inArray, like, lt, lte, ne, notInArray, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import { createPool } from "mysql2";
 import {
   Financial,
   InsertFinancial,
@@ -114,7 +115,17 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      // Explicit pool with keep-alive so idle connections to TiDB Serverless
+      // aren't silently dropped — which otherwise makes the first query after a
+      // quiet spell pay a fresh TLS handshake. (SSL is still parsed from the URL,
+      // same as the previous drizzle(url) default.)
+      const pool = createPool({
+        uri: process.env.DATABASE_URL,
+        connectionLimit: 10,
+        enableKeepAlive: true,
+        keepAliveInitialDelay: 10_000,
+      });
+      _db = drizzle(pool);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -494,25 +505,10 @@ export async function updateProjectAssignment(
 export async function getAssignmentsWithSubcontractorDetails(
   projectId: number
 ): Promise<(ProjectAssignment & { subcontractor: Subcontractor })[]> {
-  const db = await getDb();
-  if (!db) return [];
-  const assignments = await db
-    .select()
-    .from(projectAssignments)
-    .where(eq(projectAssignments.projectId, projectId));
-  
-  const result = [];
-  for (const assignment of assignments) {
-    const sub = await db
-      .select()
-      .from(subcontractors)
-      .where(eq(subcontractors.id, assignment.subcontractorId))
-      .limit(1);
-    if (sub[0]) {
-      result.push({ ...assignment, subcontractor: sub[0] });
-    }
-  }
-  return result;
+  // Two queries total (assignments + referenced subcontractors), instead of one
+  // subcontractor query per assignment.
+  const map = await getAssignmentsWithSubsForProjects([projectId]);
+  return map[projectId] ?? [];
 }
 
 /**

@@ -55,7 +55,7 @@ import {
   Circle,
   AlertCircle,
 } from "lucide-react";
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { useLocation, useParams } from "wouter";
 import { useNavigation } from "@/contexts/NavigationContext";
@@ -104,10 +104,20 @@ export default function AdminProjectDetail() {
   const { data: assignments = [] } = trpc.projects.getAssignments.useQuery({ projectId });
   const { data: subs = [] } = trpc.subcontractors.list.useQuery();
   const { data: notes = [] } = trpc.projects.getNotes.useQuery({ projectId });
-  const { data: files = [] } = trpc.projects.getFiles.useQuery({ projectId });
+  // Files are not persisted yet (the endpoint is a stub) — no need to fetch.
+  const files: never[] = [];
   const { data: financial } = trpc.projects.getFinancial.useQuery({ projectId });
-  const { data: manualChecklistItems = [] } = trpc.projects.getChecklistItems.useQuery({ projectId, source: "manual" });
-  const { data: extractedChecklistItems = [] } = trpc.projects.getChecklistItems.useQuery({ projectId, source: "extracted" });
+  // Fetch the checklist once and split by source client-side (was two identical
+  // fetch-all-then-filter queries).
+  const { data: allChecklistItems = [] } = trpc.projects.getChecklistItems.useQuery({ projectId });
+  const manualChecklistItems = useMemo(
+    () => allChecklistItems.filter((i: any) => i.source === "manual"),
+    [allChecklistItems]
+  );
+  const extractedChecklistItems = useMemo(
+    () => allChecklistItems.filter((i: any) => i.source === "extracted"),
+    [allChecklistItems]
+  );
   
   // For backward compatibility, use extracted items for the Files tab
   const checklistItems = extractedChecklistItems;
@@ -1043,7 +1053,7 @@ export default function AdminProjectDetail() {
               <ProposalUploadSection
                 projectId={projectId}
                 onProposalUploaded={() => {
-                  utils.projects.getChecklistItems.invalidate({ projectId, source: "extracted" });
+                  utils.projects.getChecklistItems.invalidate({ projectId });
                 }}
               />
 

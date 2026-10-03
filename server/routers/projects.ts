@@ -910,11 +910,15 @@ export const projectsRouter = router({
         subcontractorIds: input.subcontractorIds,
       });
       
-      // Fetch all active projects (Review-status projects are excluded from the PDF)
-      let allProjects = (await getAllProjects({
+      // Fetch all non-archived, non-Review projects ONCE (Inspection Passed
+      // included) and derive both lists in memory, instead of two DB round-trips.
+      // `allProjectsIncl` feeds the combined-jobs lookup; `allProjects` (the solo
+      // schedule) additionally drops Inspection Passed, as before.
+      const allProjectsIncl = (await getAllProjects({
         isArchived: false,
-        includeInspectionPassed: false,
+        includeInspectionPassed: true,
       })).filter((p) => p.status !== "Review");
+      let allProjects = allProjectsIncl.filter((p) => p.status !== "Inspection Passed");
 
       // Daily combinations -> merge grouped jobs into one PDF entry per day.
       const scheduleCombos = await getScheduleCombinations();
@@ -932,7 +936,7 @@ export const projectsRouter = router({
       // included) so a combined member shows in the PDF exactly as it does on the
       // dashboard — even if it isn't independently scheduled that day or is passed.
       const comboMemberMap = new Map<number, (typeof allProjects)[number]>();
-      for (const p of (await getAllProjects({ isArchived: false, includeInspectionPassed: true })).filter((p) => p.status !== "Review")) {
+      for (const p of allProjectsIncl) {
         comboMemberMap.set(p.id, p);
       }
 
