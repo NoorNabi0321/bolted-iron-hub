@@ -169,6 +169,20 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        // Split large, stable third-party code into its own cached chunks so an
+        // app-only deploy doesn't force users to re-download React/Radix etc.
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("@radix-ui")) return "radix";
+          if (/node_modules\/(react-dom|react|scheduler|use-sync-external-store)\//.test(id)) return "react-vendor";
+          if (id.includes("@tanstack") || id.includes("@trpc") || id.includes("superjson")) return "data";
+          if (id.includes("lucide-react")) return "icons";
+          return "vendor";
+        },
+      },
+    },
   },
   server: {
     host: true,
